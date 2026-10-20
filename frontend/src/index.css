@@ -1,0 +1,6 @@
+/* Global reset kept minimal; layout styles live in App.css */
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+}

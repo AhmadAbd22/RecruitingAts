@@ -1,0 +1,103 @@
+:root {
+  font-family: "Segoe UI", system-ui, sans-serif;
+  line-height: 1.5;
+  color: #14213d;
+  background: #f3f5f9;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+}
+
+.shell {
+  max-width: 420px;
+  margin: 3rem auto;
+  padding: 0 1rem;
+}
+
+header h1 {
+  margin: 0 0 0.25rem;
+  font-size: 1.75rem;
+  font-weight: 600;
+}
+
+.muted {
+  color: #5c6b7a;
+  font-size: 0.9rem;
+}
+
+.card {
+  margin-top: 1.5rem;
+  padding: 1.25rem;
+  background: #fff;
+  border: 1px solid #d9e0ea;
+  border-radius: 10px;
+}
+
+.tabs {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.tabs button {
+  flex: 1;
+}
+
+.tabs button.active {
+  background: #14213d;
+  color: #fff;
+  border-color: #14213d;
+}
+
+form {
+  display: grid;
+  gap: 0.75rem;
+}
+
+label {
+  display: grid;
+  gap: 0.35rem;
+  font-size: 0.9rem;
+}
+
+input {
+  padding: 0.55rem 0.65rem;
+  border: 1px solid #c5d0de;
+  border-radius: 6px;
+  font: inherit;
+}
+
+button {
+  padding: 0.6rem 0.9rem;
+  border: 1px solid #c5d0de;
+  border-radius: 6px;
+  background: #eef2f7;
+  font: inherit;
+  cursor: pointer;
+}
+
+button[type='submit'] {
+  background: #1d4ed8;
+  border-color: #1d4ed8;
+  color: #fff;
+}
+
+button:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+.error {
+  margin: 0;
+  color: #b91c1c;
+  font-size: 0.9rem;
+}
+
+code {
+  font-size: 0.85em;
+}
