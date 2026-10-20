@@ -12,6 +12,27 @@ export type UserDto = {
   id: string
   email: string
   fullName: string
+  roles: string[]
+  permissions: string[]
+}
+
+export const Permissions = {
+  RequisitionsViewAll: 'REQUISITIONS.ALL_REQS.VIEW',
+  RequisitionsManage: 'REQUISITIONS.MANAGE',
+  RequisitionsApprove: 'REQUISITIONS.APPROVE',
+  CompensationView: 'ATS.COMPENSATION.VIEW',
+  CompensationEdit: 'ATS.COMPENSATION.EDIT',
+  PoolView: 'POOL.VIEW',
+  CandidatesManage: 'CANDIDATES.MANAGE',
+  ApplicationsManage: 'APPLICATIONS.MANAGE',
+  InterviewsSchedule: 'INTERVIEWS.SCHEDULE',
+  InterviewsFeedbackAdd: 'INTERVIEWS.FEEDBACK.ADD',
+  StagesManage: 'STAGES.MANAGE',
+  UsersManage: 'USERS.MANAGE',
+} as const
+
+export function hasPermission(user: UserDto | null | undefined, permission: string) {
+  return !!user?.permissions.includes(permission)
 }
 
 export async function getHealth() {

@@ -3,12 +3,21 @@ import type { FormEvent } from 'react'
 import {
   getHealth,
   getMe,
+  hasPermission,
   login,
   logout,
+  Permissions,
   register,
   type UserDto,
 } from './api/client'
 import './App.css'
+
+const demoAccounts = [
+  { email: 'admin@demo.local', label: 'Admin' },
+  { email: 'recruiter@demo.local', label: 'Recruiter' },
+  { email: 'manager@demo.local', label: 'Hiring Manager' },
+  { email: 'interviewer@demo.local', label: 'Interviewer' },
+]
 
 function App() {
   const [health, setHealth] = useState<string>('checking…')
@@ -67,9 +76,34 @@ function App() {
             <br />
             {user.email}
           </p>
+
+          <div className="meta">
+            <h3>Roles</h3>
+            <ul>
+              {user.roles.length === 0 ? <li className="muted">None</li> : null}
+              {user.roles.map((role) => (
+                <li key={role}>{role}</li>
+              ))}
+            </ul>
+          </div>
+
+          <div className="meta">
+            <h3>Permissions</h3>
+            <ul>
+              {user.permissions.length === 0 ? <li className="muted">None</li> : null}
+              {user.permissions.map((permission) => (
+                <li key={permission}>
+                  <code>{permission}</code>
+                </li>
+              ))}
+            </ul>
+          </div>
+
           <p className="muted">
-            Cookie auth is working (httpOnly session via Vite <code>/api</code> proxy).
+            Compensation access:{' '}
+            {hasPermission(user, Permissions.CompensationView) ? 'yes' : 'no'}
           </p>
+
           <button type="button" onClick={onLogout}>
             Log out
           </button>
@@ -92,6 +126,23 @@ function App() {
               Register
             </button>
           </div>
+
+          {mode === 'login' && (
+            <div className="demo-accounts">
+              {demoAccounts.map((account) => (
+                <button
+                  key={account.email}
+                  type="button"
+                  onClick={() => {
+                    setEmail(account.email)
+                    setPassword('Pass123!')
+                  }}
+                >
+                  {account.label}
+                </button>
+              ))}
+            </div>
+          )}
 
           <form onSubmit={onSubmit}>
             {mode === 'register' && (

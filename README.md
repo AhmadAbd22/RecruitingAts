@@ -58,16 +58,31 @@ npm run dev
 
 Open **http://localhost:5173**. Register a user, then confirm `/api/auth/me` works via the cookie session.
 
+## Auth (Option B — permissions)
+
+Roles are seeded; **permissions** are claims on those roles. APIs use policies like `[Authorize(Policy = Permissions.CompensationView)]`. No role-admin UI.
+
+| Email | Password | Role |
+|-------|----------|------|
+| `admin@demo.local` | `Pass123!` | Admin (all permissions) |
+| `recruiter@demo.local` | `Pass123!` | Recruiter |
+| `manager@demo.local` | `Pass123!` | HiringManager |
+| `interviewer@demo.local` | `Pass123!` | Interviewer |
+
+`GET /api/auth/me` returns `roles` + `permissions`.  
+Probe: `GET /api/debug/compensation` (requires `ATS.COMPENSATION.VIEW`).
+
 ## Useful API routes
 
 | Method | Path | Notes |
 |--------|------|--------|
 | GET | `/api/health` | Liveness |
-| POST | `/api/auth/register` | Creates user + signs in |
+| POST | `/api/auth/register` | Creates user + signs in (no demo role) |
 | POST | `/api/auth/login` | Cookie session |
 | POST | `/api/auth/logout` | Ends session |
-| GET | `/api/auth/me` | Current user (401 if anonymous) |
+| GET | `/api/auth/me` | Current user + roles/permissions |
+| GET | `/api/debug/compensation` | Policy smoke test |
 
 ## Next (domain work)
 
-Must / Should features from the project brief: requisitions, talent pool, applications/pipeline, interviews, audit, compensation rules. Access-control approach TBD with mentor (roles deferred).
+Must / Should: requisitions, talent pool, applications/pipeline, interviews, audit, compensation field gating + requisition scope.

@@ -1,6 +1,7 @@
 using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using RecruitingAts.Api.Auth;
 using RecruitingAts.Api.Data;
 using RecruitingAts.Api.Storage;
 
@@ -29,6 +30,9 @@ builder.Services
     })
     .AddEntityFrameworkStores<AppDbContext>()
     .AddDefaultTokenProviders();
+
+builder.Services.AddScoped<IUserClaimsPrincipalFactory<ApplicationUser>, AppClaimsPrincipalFactory>();
+builder.Services.AddAppAuthorization();
 
 builder.Services.ConfigureApplicationCookie(options =>
 {
@@ -66,6 +70,8 @@ builder.Services.AddCors(options =>
 builder.Services.AddScoped<IFileStorage, LocalFileStorage>();
 
 var app = builder.Build();
+
+await DbSeeder.SeedAsync(app.Services);
 
 if (app.Environment.IsDevelopment())
 {
