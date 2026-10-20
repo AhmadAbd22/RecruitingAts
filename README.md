@@ -176,7 +176,7 @@ dotnet tool update --global dotnet-ef
 ## Clone and first-time setup
 
 ```powershell
-git clone <repo-url>
+git clone https://github.com/AhmadAbd22/RecruitingAts.git
 cd RecruitingAts
 ```
 
