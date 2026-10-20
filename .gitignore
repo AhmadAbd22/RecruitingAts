@@ -32,3 +32,8 @@ Thumbs.db
 .env
 .env.*
 !.env.example
+
+# Local-only notes (never commit)
+*.local.md
+DOMAIN_DECISIONS.local.md
+
