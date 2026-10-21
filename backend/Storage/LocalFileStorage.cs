@@ -2,6 +2,8 @@ namespace RecruitingAts.Api.Storage;
 
 public class LocalFileStorage : IFileStorage
 {
+    public const long MaxResumeBytes = 5 * 1024 * 1024;
+
     private readonly string _root;
 
     public LocalFileStorage(IWebHostEnvironment env, IConfiguration configuration)
@@ -23,11 +25,30 @@ public class LocalFileStorage : IFileStorage
             throw new InvalidOperationException("Only PDF files are allowed.");
         }
 
+        if (content.CanSeek && content.Length > MaxResumeBytes)
+        {
+            throw new InvalidOperationException($"PDF must be {MaxResumeBytes / (1024 * 1024)} MB or smaller.");
+        }
+
         var storedName = $"{Guid.NewGuid():N}.pdf";
         var fullPath = Path.Combine(_root, storedName);
 
         await using var file = File.Create(fullPath);
-        await content.CopyToAsync(file, cancellationToken);
+        var buffer = new byte[81920];
+        long total = 0;
+        int read;
+        while ((read = await content.ReadAsync(buffer.AsMemory(0, buffer.Length), cancellationToken)) > 0)
+        {
+            total += read;
+            if (total > MaxResumeBytes)
+            {
+                await file.DisposeAsync();
+                File.Delete(fullPath);
+                throw new InvalidOperationException($"PDF must be {MaxResumeBytes / (1024 * 1024)} MB or smaller.");
+            }
+
+            await file.WriteAsync(buffer.AsMemory(0, read), cancellationToken);
+        }
 
         return storedName;
     }
