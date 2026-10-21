@@ -224,6 +224,428 @@ namespace RecruitingAts.Api.Data.Migrations
                     b.ToTable("AspNetUsers", (string)null);
                 });
 
+            modelBuilder.Entity("RecruitingAts.Api.Data.Entities.Application", b =>
+                {
+                    b.Property<Guid>("ApplicationId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("CandidateId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("DispositionReason")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<decimal?>("ExpectedSalary")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<Guid>("PipelineStageId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("RequisitionId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Source")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.HasKey("ApplicationId");
+
+                    b.HasIndex("PipelineStageId");
+
+                    b.HasIndex("RequisitionId");
+
+                    b.HasIndex("CandidateId", "RequisitionId")
+                        .IsUnique();
+
+                    b.ToTable("Applications");
+                });
+
+            modelBuilder.Entity("RecruitingAts.Api.Data.Entities.AuditLog", b =>
+                {
+                    b.Property<Guid>("AuditLogId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Action")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("Details")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("EntityId")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("EntityType")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<DateTime>("Timestamp")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)");
+
+                    b.HasKey("AuditLogId");
+
+                    b.HasIndex("Timestamp");
+
+                    b.HasIndex("UserId");
+
+                    b.HasIndex("EntityType", "EntityId");
+
+                    b.ToTable("AuditLogs");
+                });
+
+            modelBuilder.Entity("RecruitingAts.Api.Data.Entities.Candidate", b =>
+                {
+                    b.Property<Guid>("CandidateId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime?>("ConsentDate")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("Email")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("nvarchar(256)");
+
+                    b.Property<string>("FullName")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<string>("Phone")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<string>("ResumePath")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<string>("Skills")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<string>("Source")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.HasKey("CandidateId");
+
+                    b.HasIndex("Email")
+                        .IsUnique();
+
+                    b.HasIndex("Phone")
+                        .IsUnique();
+
+                    b.ToTable("Candidates");
+                });
+
+            modelBuilder.Entity("RecruitingAts.Api.Data.Entities.Employee", b =>
+                {
+                    b.Property<Guid>("EmployeeId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("Department")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<string>("Email")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("nvarchar(256)");
+
+                    b.Property<string>("FullName")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("UserId")
+                        .HasColumnType("nvarchar(450)");
+
+                    b.HasKey("EmployeeId");
+
+                    b.HasIndex("Email");
+
+                    b.HasIndex("UserId")
+                        .IsUnique()
+                        .HasFilter("[UserId] IS NOT NULL");
+
+                    b.ToTable("Employees");
+                });
+
+            modelBuilder.Entity("RecruitingAts.Api.Data.Entities.Interview", b =>
+                {
+                    b.Property<Guid>("InterviewId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("ApplicationId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("CalendarEmailLog")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("InterviewType")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("Mode")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<DateTime>("ScheduledAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.HasKey("InterviewId");
+
+                    b.HasIndex("ApplicationId");
+
+                    b.ToTable("Interviews");
+                });
+
+            modelBuilder.Entity("RecruitingAts.Api.Data.Entities.InterviewFeedback", b =>
+                {
+                    b.Property<Guid>("InterviewFeedbackId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Concerns")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<Guid>("InterviewId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("InterviewerEmployeeId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<int>("Rating")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Recommendation")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<string>("Strengths")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTime>("SubmittedAt")
+                        .HasColumnType("datetime2");
+
+                    b.HasKey("InterviewFeedbackId");
+
+                    b.HasIndex("InterviewerEmployeeId");
+
+                    b.HasIndex("InterviewId", "InterviewerEmployeeId")
+                        .IsUnique();
+
+                    b.ToTable("InterviewFeedbacks");
+                });
+
+            modelBuilder.Entity("RecruitingAts.Api.Data.Entities.InterviewPanelMember", b =>
+                {
+                    b.Property<Guid>("InterviewPanelMemberId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("EmployeeId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("InterviewId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<bool>("IsLead")
+                        .HasColumnType("bit");
+
+                    b.HasKey("InterviewPanelMemberId");
+
+                    b.HasIndex("EmployeeId");
+
+                    b.HasIndex("InterviewId", "EmployeeId")
+                        .IsUnique();
+
+                    b.ToTable("InterviewPanelMembers");
+                });
+
+            modelBuilder.Entity("RecruitingAts.Api.Data.Entities.PipelineStage", b =>
+                {
+                    b.Property<Guid>("PipelineStageId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("IsReserved")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("IsTerminal")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("int");
+
+                    b.HasKey("PipelineStageId");
+
+                    b.HasIndex("Name")
+                        .IsUnique();
+
+                    b.HasIndex("SortOrder");
+
+                    b.ToTable("PipelineStages");
+                });
+
+            modelBuilder.Entity("RecruitingAts.Api.Data.Entities.Requisition", b =>
+                {
+                    b.Property<Guid>("RequisitionId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<decimal?>("BudgetMax")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<decimal?>("BudgetMin")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("Department")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<string>("EmploymentType")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<Guid>("HiringManagerEmployeeId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("JobDescription")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<int>("Openings")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Seniority")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("Skills")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<string>("StatusReason")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.HasKey("RequisitionId");
+
+                    b.HasIndex("HiringManagerEmployeeId");
+
+                    b.ToTable("Requisitions");
+                });
+
+            modelBuilder.Entity("RecruitingAts.Api.Data.Entities.RequisitionTeamMember", b =>
+                {
+                    b.Property<Guid>("RequisitionTeamMemberId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime>("AddedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<Guid>("EmployeeId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("RequisitionId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("TeamRole")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.HasKey("RequisitionTeamMemberId");
+
+                    b.HasIndex("EmployeeId");
+
+                    b.HasIndex("RequisitionId", "EmployeeId")
+                        .IsUnique();
+
+                    b.ToTable("RequisitionTeamMembers");
+                });
+
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRoleClaim<string>", b =>
                 {
                     b.HasOne("Microsoft.AspNetCore.Identity.IdentityRole", null)
@@ -273,6 +695,173 @@ namespace RecruitingAts.Api.Data.Migrations
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+                });
+
+            modelBuilder.Entity("RecruitingAts.Api.Data.Entities.Application", b =>
+                {
+                    b.HasOne("RecruitingAts.Api.Data.Entities.Candidate", "Candidate")
+                        .WithMany("Applications")
+                        .HasForeignKey("CandidateId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("RecruitingAts.Api.Data.Entities.PipelineStage", "PipelineStage")
+                        .WithMany("Applications")
+                        .HasForeignKey("PipelineStageId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("RecruitingAts.Api.Data.Entities.Requisition", "Requisition")
+                        .WithMany("Applications")
+                        .HasForeignKey("RequisitionId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Candidate");
+
+                    b.Navigation("PipelineStage");
+
+                    b.Navigation("Requisition");
+                });
+
+            modelBuilder.Entity("RecruitingAts.Api.Data.Entities.AuditLog", b =>
+                {
+                    b.HasOne("RecruitingAts.Api.Data.ApplicationUser", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("User");
+                });
+
+            modelBuilder.Entity("RecruitingAts.Api.Data.Entities.Employee", b =>
+                {
+                    b.HasOne("RecruitingAts.Api.Data.ApplicationUser", "User")
+                        .WithOne()
+                        .HasForeignKey("RecruitingAts.Api.Data.Entities.Employee", "UserId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("User");
+                });
+
+            modelBuilder.Entity("RecruitingAts.Api.Data.Entities.Interview", b =>
+                {
+                    b.HasOne("RecruitingAts.Api.Data.Entities.Application", "Application")
+                        .WithMany("Interviews")
+                        .HasForeignKey("ApplicationId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Application");
+                });
+
+            modelBuilder.Entity("RecruitingAts.Api.Data.Entities.InterviewFeedback", b =>
+                {
+                    b.HasOne("RecruitingAts.Api.Data.Entities.Interview", "Interview")
+                        .WithMany("Feedbacks")
+                        .HasForeignKey("InterviewId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("RecruitingAts.Api.Data.Entities.Employee", "Interviewer")
+                        .WithMany("InterviewFeedbacks")
+                        .HasForeignKey("InterviewerEmployeeId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Interview");
+
+                    b.Navigation("Interviewer");
+                });
+
+            modelBuilder.Entity("RecruitingAts.Api.Data.Entities.InterviewPanelMember", b =>
+                {
+                    b.HasOne("RecruitingAts.Api.Data.Entities.Employee", "Employee")
+                        .WithMany("InterviewPanelMemberships")
+                        .HasForeignKey("EmployeeId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("RecruitingAts.Api.Data.Entities.Interview", "Interview")
+                        .WithMany("PanelMembers")
+                        .HasForeignKey("InterviewId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Employee");
+
+                    b.Navigation("Interview");
+                });
+
+            modelBuilder.Entity("RecruitingAts.Api.Data.Entities.Requisition", b =>
+                {
+                    b.HasOne("RecruitingAts.Api.Data.Entities.Employee", "HiringManager")
+                        .WithMany("HiringManagerRequisitions")
+                        .HasForeignKey("HiringManagerEmployeeId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("HiringManager");
+                });
+
+            modelBuilder.Entity("RecruitingAts.Api.Data.Entities.RequisitionTeamMember", b =>
+                {
+                    b.HasOne("RecruitingAts.Api.Data.Entities.Employee", "Employee")
+                        .WithMany("TeamMemberships")
+                        .HasForeignKey("EmployeeId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("RecruitingAts.Api.Data.Entities.Requisition", "Requisition")
+                        .WithMany("TeamMembers")
+                        .HasForeignKey("RequisitionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Employee");
+
+                    b.Navigation("Requisition");
+                });
+
+            modelBuilder.Entity("RecruitingAts.Api.Data.Entities.Application", b =>
+                {
+                    b.Navigation("Interviews");
+                });
+
+            modelBuilder.Entity("RecruitingAts.Api.Data.Entities.Candidate", b =>
+                {
+                    b.Navigation("Applications");
+                });
+
+            modelBuilder.Entity("RecruitingAts.Api.Data.Entities.Employee", b =>
+                {
+                    b.Navigation("HiringManagerRequisitions");
+
+                    b.Navigation("InterviewFeedbacks");
+
+                    b.Navigation("InterviewPanelMemberships");
+
+                    b.Navigation("TeamMemberships");
+                });
+
+            modelBuilder.Entity("RecruitingAts.Api.Data.Entities.Interview", b =>
+                {
+                    b.Navigation("Feedbacks");
+
+                    b.Navigation("PanelMembers");
+                });
+
+            modelBuilder.Entity("RecruitingAts.Api.Data.Entities.PipelineStage", b =>
+                {
+                    b.Navigation("Applications");
+                });
+
+            modelBuilder.Entity("RecruitingAts.Api.Data.Entities.Requisition", b =>
+                {
+                    b.Navigation("Applications");
+
+                    b.Navigation("TeamMembers");
                 });
 #pragma warning restore 612, 618
         }

@@ -249,18 +249,34 @@ Open the UI, pick a demo account button, log in. You should see **roles** and **
 
 ---
 
-## Seeded demo users
+## Seeded data
 
-Created automatically on API startup (`backend/Data/DbSeeder.cs`).
+Created automatically on API startup (`backend/Data/DbSeeder.cs`). Idempotent (safe to restart).
 
-| Email | Password | Role | Purpose |
-|-------|----------|------|---------|
-| `admin@demo.local` | `Pass123!` | **Admin** | Approvals, all permissions, compensation |
-| `recruiter@demo.local` | `Pass123!` | **Recruiter** | Day-to-day hiring work |
-| `manager@demo.local` | `Pass123!` | **HiringManager** | Own / manage requisitions |
-| `interviewer@demo.local` | `Pass123!` | **Interviewer** | Feedback only |
+### Demo users + employees
 
-Self-register via the UI creates a user **without** a demo role (fine for tinkering; use seeded accounts for demos).
+Each demo user also gets a linked `Employee` row (same email / `UserId`).
+
+| Email | Password | Role | Department |
+|-------|----------|------|------------|
+| `admin@demo.local` | `Pass123!` | **Admin** | HR |
+| `recruiter@demo.local` | `Pass123!` | **Recruiter** | Talent Acquisition |
+| `manager@demo.local` | `Pass123!` | **HiringManager** | Engineering |
+| `interviewer@demo.local` | `Pass123!` | **Interviewer** | Engineering |
+
+Self-register via the UI creates a user **without** a demo role or employee (fine for tinkering; use seeded accounts for demos).
+
+### Pipeline stages
+
+| Name | SortOrder | Reserved | Terminal |
+|------|-----------|----------|----------|
+| Applied | 1 | yes | no |
+| Screening | 2 | no | no |
+| Interview | 3 | no | no |
+| Offer | 4 | no | no |
+| Hired | 100 | yes | yes |
+| Disqualified | 101 | yes | yes |
+| NFA | 102 | yes | yes |
 
 ---
 
@@ -287,7 +303,7 @@ Constants live in `backend/Auth/Permissions.cs`.
 | `REQUISITIONS.APPROVE` | ✓ | | | |
 | `ATS.COMPENSATION.VIEW` | ✓ | | | |
 | `ATS.COMPENSATION.EDIT` | ✓ | | | |
-| `POOL.VIEW` | ✓ | ✓ | ✓ | |
+| `POOL.VIEW` | ✓ | ✓ | | |
 | `CANDIDATES.MANAGE` | ✓ | ✓ | ✓ | |
 | `APPLICATIONS.MANAGE` | ✓ | ✓ | ✓ | |
 | `INTERVIEWS.SCHEDULE` | ✓ | ✓ | ✓ | |
@@ -317,6 +333,11 @@ Frontend may hide buttons using `user.permissions`, but **server must enforce** 
 | POST | `/api/auth/logout` | Authenticated | Clears cookie |
 | GET | `/api/auth/me` | Authenticated | `{ id, email, fullName, roles, permissions }` |
 | GET | `/api/debug/compensation` | `ATS.COMPENSATION.VIEW` | Policy smoke test |
+| GET/POST | `/api/requisitions` … | Scoped list/create; submit/approve/reject/publish/status/team/budget |
+| GET/POST | `/api/candidates` … | Pool search/create; duplicates; résumé upload/download |
+| GET | `/api/employees` | Active employees (HM / team pickers) |
+
+Requisition flow: **Draft → submit → PendingApproval → approve → Approved → publish → Published**. Published job criteria are not edited. Talent pool: **Admin + Recruiter**. PDF max **5 MB**.
 
 Quick API checks (with cookie jar) once logged in from the browser, or use the React shell.
 

@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using RecruitingAts.Api.Auth;
 using RecruitingAts.Api.Data;
+using RecruitingAts.Api.Services;
 using RecruitingAts.Api.Storage;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -68,6 +69,10 @@ builder.Services.AddCors(options =>
 });
 
 builder.Services.AddScoped<IFileStorage, LocalFileStorage>();
+builder.Services.AddScoped<IAuditService, AuditService>();
+builder.Services.AddScoped<IRequisitionScopeService, RequisitionScopeService>();
+builder.Services.AddScoped<RequisitionService>();
+builder.Services.AddScoped<CandidateService>();
 
 var app = builder.Build();
 
