@@ -1,4 +1,5 @@
 ﻿
+using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using RecruitingAts.Api.Data;
 using RecruitingAts.Api.Data.Entities;
@@ -9,8 +10,9 @@ namespace RecruitingAts.Api.Services
 {
     public class ApplicationService(AppDbContext db, IRequisitionScopeService requisitionScope)
     {
-        public async Task<Application?> CreateAsync(
+        public async Task<ApplicationCreateResult> CreateAsync(
             CreateApplicationRequest request,
+            ClaimsPrincipal user,
             CancellationToken cancellationToken = default)
         {
             var candidateExists = await db.Candidates
@@ -19,7 +21,7 @@ namespace RecruitingAts.Api.Services
                     cancellationToken);
 
             if (!candidateExists)
-                return null;
+                return new(ApplicationCreateStatus.CandidateNotFound);
 
             var requisition = await db.Requisitions
                 .FirstOrDefaultAsync(
@@ -27,13 +29,21 @@ namespace RecruitingAts.Api.Services
                     cancellationToken);
 
             if (requisition is null)
-                return null;
+                return new(ApplicationCreateStatus.RequisitionNotFound);
 
-            //Deliberatly Comment
-            /*
+            var canAccess = await requisitionScope.CanAccessAsync(
+    request.RequisitionId,
+    user,
+    cancellationToken);
+
+            if (!canAccess)
+                return new(ApplicationCreateStatus.Forbidden);
+
+            //Can be Deliberatly Comment
+
             if (requisition.Status != RequisitionStatuses.Published)
-                return null;
-            */
+                return new(ApplicationCreateStatus.RequisitionNotPublished);
+
             var applicationExists = await db.Applications
                 .AnyAsync(
                     a => a.CandidateId == request.CandidateId &&
@@ -41,7 +51,7 @@ namespace RecruitingAts.Api.Services
                     cancellationToken);
 
             if (applicationExists)
-                return null;
+                return new(ApplicationCreateStatus.DuplicateApplication);
 
             var appliedStage = await db.PipelineStages
                 .FirstOrDefaultAsync(
@@ -49,7 +59,7 @@ namespace RecruitingAts.Api.Services
                     cancellationToken);
 
             if (appliedStage is null)
-                return null;
+                return new(ApplicationCreateStatus.AppliedStageNotFound);
 
             var application = new Application
             {
@@ -60,14 +70,28 @@ namespace RecruitingAts.Api.Services
             };
 
             db.Applications.Add(application);
-            await db.SaveChangesAsync(cancellationToken);
+            try
+            {
+                await db.SaveChangesAsync(cancellationToken);
+            }
+            catch (DbUpdateException ex)
+                when (ex.InnerException is SqlException sqlException &&
+                      (sqlException.Number == 2601 ||
+                       sqlException.Number == 2627))
+            {
+                db.Entry(application).State = EntityState.Detached;
+                return new(ApplicationCreateStatus.DuplicateApplication);
+            }
 
-            return application;
+            return new(
+    ApplicationCreateStatus.Success,
+    application);
         }
 
-        public async Task<bool> UpdateStageAsync(
+        public async Task<ApplicationStageUpdateResult> UpdateStageAsync(
             Guid applicationId,
             UpdateApplicationStageRequest request,
+            ClaimsPrincipal user,
             CancellationToken cancellationToken = default)
         {
             var application = await db.Applications
@@ -76,7 +100,15 @@ namespace RecruitingAts.Api.Services
                     cancellationToken);
 
             if (application is null)
-                return false;
+                return new(ApplicationStageUpdateStatus.ApplicationNotFound);
+
+            var canAccess = await requisitionScope.CanAccessAsync(
+    application.RequisitionId,
+    user,
+    cancellationToken);
+
+            if (!canAccess)
+                return new(ApplicationStageUpdateStatus.Forbidden);
 
             var stage = await db.PipelineStages
                 .FirstOrDefaultAsync(
@@ -84,21 +116,25 @@ namespace RecruitingAts.Api.Services
                     cancellationToken);
 
             if (stage is null)
-                return false;
+                return new(ApplicationStageUpdateStatus.StageNotFound);
 
             if (stage.Name == PipelineStageNames.Disqualified ||
                 stage.Name == PipelineStageNames.Nfa)
             {
                 if (string.IsNullOrWhiteSpace(request.DispositionReason))
-                    return false;
+                    return new(ApplicationStageUpdateStatus.DispositionReasonRequired);
             }
 
             application.PipelineStageId = stage.PipelineStageId;
-            application.DispositionReason = request.DispositionReason;
+            if (stage.Name == PipelineStageNames.Disqualified ||
+                stage.Name == PipelineStageNames.Nfa)
+            {
+                application.DispositionReason = request.DispositionReason;
+            }
             application.UpdatedAt = DateTime.UtcNow;
 
             await db.SaveChangesAsync(cancellationToken);
-            return true;
+            return new(ApplicationStageUpdateStatus.Success);
         }
 
         public async Task<List<ApplicationPipelineItemDto>> GetPipelineAsync(
@@ -150,3 +186,32 @@ namespace RecruitingAts.Api.Services
         string? Source
     );
 }
+
+
+public enum ApplicationStageUpdateStatus
+{
+    Success,
+    ApplicationNotFound,
+    Forbidden,
+    StageNotFound,
+    DispositionReasonRequired
+}
+
+public record ApplicationStageUpdateResult(
+    ApplicationStageUpdateStatus Status);
+
+
+public enum ApplicationCreateStatus
+{
+    Success,
+    CandidateNotFound,
+    RequisitionNotFound,
+    Forbidden,
+    RequisitionNotPublished,
+    DuplicateApplication,
+    AppliedStageNotFound
+}
+
+public record ApplicationCreateResult(
+    ApplicationCreateStatus Status,
+    Application? Application = null);

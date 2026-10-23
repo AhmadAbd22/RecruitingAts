@@ -13,54 +13,106 @@ namespace RecruitingAts.Api.Controllers
     {
         [HttpPost]
         [Authorize(Policy = Permissions.ApplicationsManage)]
-        public async Task<ActionResult<Application>> Create(
+
+        [HttpPost]
+        public async Task<IActionResult> Create(
     [FromBody] CreateApplicationRequest request,
     CancellationToken cancellationToken)
         {
-            var application = await applicationService.CreateAsync(
-                request, cancellationToken);
+            var result = await applicationService.CreateAsync(
+                request,
+                User,
+                cancellationToken);
 
-            if (application is null)
+            switch (result.Status)
             {
-                return BadRequest(new
-                {
-                    message = "Could not create application."
-                });
+                case ApplicationCreateStatus.Success:
+                    return Ok(new
+                    {
+                        result.Application!.ApplicationId,
+                        result.Application.CandidateId,
+                        result.Application.RequisitionId,
+                        result.Application.PipelineStageId,
+                        result.Application.Source,
+                        result.Application.CreatedAt
+                    });
+
+                case ApplicationCreateStatus.CandidateNotFound:
+                    return NotFound(new { message = "Candidate not found." });
+
+                case ApplicationCreateStatus.RequisitionNotFound:
+                    return NotFound(new { message = "Requisition not found." });
+
+                case ApplicationCreateStatus.Forbidden:
+                    return StatusCode(StatusCodes.Status403Forbidden,
+                        new { message = "You do not have access to this requisition." });
+
+                case ApplicationCreateStatus.RequisitionNotPublished:
+                    return BadRequest(new
+                    {
+                        message = "Applications can only be created for published requisitions."
+                    });
+
+                case ApplicationCreateStatus.DuplicateApplication:
+                    return Conflict(new
+                    {
+                        message = "This candidate already has an application for this requisition."
+                    });
+
+                case ApplicationCreateStatus.AppliedStageNotFound:
+                    return StatusCode(StatusCodes.Status500InternalServerError,
+                        new { message = "The Applied pipeline stage is not configured." });
+
+                default:
+                    return BadRequest();
             }
-
-            return Ok(new
-            {
-                application.ApplicationId,
-                application.CandidateId,
-                application.RequisitionId,
-                application.PipelineStageId,
-                application.Source,
-                application.CreatedAt
-            });
         }
+
+
 
         [HttpPatch("{applicationId:guid}/stage")]
         [Authorize(Policy = Permissions.ApplicationsManage)]
         public async Task<IActionResult> UpdateStage(
-    Guid applicationId,
-    [FromBody] UpdateApplicationStageRequest request,
-    CancellationToken cancellationToken)
+            Guid applicationId,
+            [FromBody] UpdateApplicationStageRequest request,
+            CancellationToken cancellationToken)
         {
             var updated = await applicationService.UpdateStageAsync(
                 applicationId,
                 request,
+                User,
                 cancellationToken);
 
-            if (!updated)
+            switch (updated.Status)
             {
-                return BadRequest(new
-                {
-                    message = "Application or pipeline stage not found."
-                });
-            }
+                case ApplicationStageUpdateStatus.Success:
+                    return NoContent();
 
-            return NoContent();
+                case ApplicationStageUpdateStatus.ApplicationNotFound:
+                case ApplicationStageUpdateStatus.StageNotFound:
+                    return NotFound(new
+                    {
+                        message = "Application or pipeline stage not found."
+                    });
+
+                case ApplicationStageUpdateStatus.Forbidden:
+                    return StatusCode(StatusCodes.Status403Forbidden, new
+                    {
+                        message = "You do not have access to this requisition."
+                    });
+
+                case ApplicationStageUpdateStatus.DispositionReasonRequired:
+                    return BadRequest(new
+                    {
+                        message = "A disposition reason is required for Disqualified or NFA."
+                    });
+
+                default:
+                    return BadRequest();
+            }
         }
+
+
 
         [HttpGet("pipeline")]
         [Authorize(Policy = Permissions.ApplicationsManage)]
