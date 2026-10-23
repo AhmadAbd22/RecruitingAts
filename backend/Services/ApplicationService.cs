@@ -3,10 +3,11 @@ using Microsoft.EntityFrameworkCore;
 using RecruitingAts.Api.Data;
 using RecruitingAts.Api.Data.Entities;
 using RecruitingAts.Api.Domain;
+using System.Security.Claims;
 
 namespace RecruitingAts.Api.Services
 {
-    public class ApplicationService(AppDbContext db)
+    public class ApplicationService(AppDbContext db, IRequisitionScopeService requisitionScope)
     {
         public async Task<Application?> CreateAsync(
             CreateApplicationRequest request,
@@ -28,10 +29,11 @@ namespace RecruitingAts.Api.Services
             if (requisition is null)
                 return null;
 
-            // Restore this check to enforce FR-APP-002.
+            //Deliberatly Comment
+            /*
             if (requisition.Status != RequisitionStatuses.Published)
                 return null;
-
+            */
             var applicationExists = await db.Applications
                 .AnyAsync(
                     a => a.CandidateId == request.CandidateId &&
@@ -98,8 +100,45 @@ namespace RecruitingAts.Api.Services
             await db.SaveChangesAsync(cancellationToken);
             return true;
         }
+
+        public async Task<List<ApplicationPipelineItemDto>> GetPipelineAsync(
+    ClaimsPrincipal user,
+    CancellationToken cancellationToken = default)
+        {
+            var employeeId = await requisitionScope.GetEmployeeIdAsync(
+                user, cancellationToken);
+
+            var scopedRequisitions = requisitionScope.Scope(
+                db.Requisitions.AsNoTracking(),
+                user,
+                employeeId);
+
+            return await db.Applications
+                .AsNoTracking()
+                .Where(a => scopedRequisitions.Any(
+                    r => r.RequisitionId == a.RequisitionId))
+                .Select(a => new ApplicationPipelineItemDto(
+                    a.ApplicationId,
+                    a.CandidateId,
+                    a.RequisitionId,
+                    a.Requisition.Title,
+                    a.PipelineStageId,
+                    a.PipelineStage.Name,
+                    a.Source,
+                    a.CreatedAt))
+                .ToListAsync(cancellationToken);
+        }
     }
 
+    public record ApplicationPipelineItemDto(
+    Guid ApplicationId,
+    Guid CandidateId,
+    Guid RequisitionId,
+    string RequisitionTitle,
+    Guid PipelineStageId,
+    string StageName,
+    string? Source,
+    DateTime CreatedAt);
     public record UpdateApplicationStageRequest(
         Guid PipelineStageId,
         string? DispositionReason

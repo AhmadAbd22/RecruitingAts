@@ -9,7 +9,7 @@ namespace RecruitingAts.Api.Controllers
     [ApiController]
     [Authorize]
     [Route("api/applications")]
-    public class ApplicationController(ApplicationService applications) : ControllerBase
+    public class ApplicationController(ApplicationService applicationService) : ControllerBase
     {
         [HttpPost]
         [Authorize(Policy = Permissions.ApplicationsManage)]
@@ -17,7 +17,7 @@ namespace RecruitingAts.Api.Controllers
     [FromBody] CreateApplicationRequest request,
     CancellationToken cancellationToken)
         {
-            var application = await applications.CreateAsync(
+            var application = await applicationService.CreateAsync(
                 request, cancellationToken);
 
             if (application is null)
@@ -46,7 +46,7 @@ namespace RecruitingAts.Api.Controllers
     [FromBody] UpdateApplicationStageRequest request,
     CancellationToken cancellationToken)
         {
-            var updated = await applications.UpdateStageAsync(
+            var updated = await applicationService.UpdateStageAsync(
                 applicationId,
                 request,
                 cancellationToken);
@@ -60,6 +60,17 @@ namespace RecruitingAts.Api.Controllers
             }
 
             return NoContent();
+        }
+
+        [HttpGet("pipeline")]
+        [Authorize(Policy = Permissions.ApplicationsManage)]
+        public async Task<ActionResult<List<ApplicationPipelineItemDto>>> GetPipeline(
+    CancellationToken cancellationToken)
+        {
+            var applications = await applicationService.GetPipelineAsync(
+                User, cancellationToken);
+
+            return Ok(applications);
         }
     }
 }
