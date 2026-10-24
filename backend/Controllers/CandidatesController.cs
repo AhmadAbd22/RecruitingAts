@@ -32,54 +32,127 @@ public class CandidatesController(CandidateService candidates) : ControllerBase
     [HttpGet("duplicates")]
     [Authorize(Policy = Permissions.CandidatesManage)]
     public async Task<ActionResult<DuplicateCheckResult>> Duplicates(
-        [FromQuery] string email,
-        [FromQuery] string phone,
+        [FromQuery] DuplicateCheckRequest request,
         CancellationToken cancellationToken)
     {
-        var result = await candidates.FindDuplicatesAsync(email, phone, cancellationToken: cancellationToken);
+        if (string.IsNullOrWhiteSpace(request.Email)
+        && string.IsNullOrWhiteSpace(request.Phone))
+        {
+            return BadRequest(new
+            {
+                message = "Provide an email address or phone number."
+            });
+        }
+        if (!string.IsNullOrWhiteSpace(request.Phone))
+        {
+            if (!candidates.IsPhoneValid(request.Phone))
+            {
+                return BadRequest(new
+                {
+                    message = "Enter a valid phone number."
+                });
+            }
+        }
+
+        var result = await candidates.FindDuplicatesAsync(
+            request.Email,
+            request.Phone,
+            cancellationToken: cancellationToken);
+
         return Ok(result);
     }
 
     [HttpPost]
     [Authorize(Policy = Permissions.CandidatesManage)]
+    [Consumes("multipart/form-data")]
+    [RequestSizeLimit(LocalFileStorage.MaxResumeBytes + 64 * 1024)]
     public async Task<ActionResult> Create(
-        [FromBody] CreateCandidateRequest request,
-        [FromQuery] bool confirmDuplicate = false,
+        [FromForm] CreateCandidateRequest request,
+        [FromForm] IFormFile? file,
         CancellationToken cancellationToken = default)
     {
-        var (detail, duplicate, error) = await candidates.CreateAsync(request, confirmDuplicate, cancellationToken);
-        if (duplicate is { IsDuplicate: true } && detail is null && error is null)
+        if (file is null || file.Length == 0)
+        {
+            return BadRequest(new
+            {
+                message = "A PDF resume is required."
+            });
+        }
+
+        if (file.Length > LocalFileStorage.MaxResumeBytes)
+        {
+            return BadRequest(new
+            {
+                message = "PDF must be 5 MB or smaller."
+            });
+        }
+
+        await using var stream = file.OpenReadStream();
+
+        var (detail, duplicate, error) = await candidates.CreateAsync(
+            request,
+            stream,
+            file.FileName,
+            cancellationToken);
+
+        if (duplicate != null && duplicate.IsDuplicate)
         {
             return Conflict(new
             {
-                message = "Possible duplicate candidate. Pass confirmDuplicate=true to acknowledge, or use an existing match.",
+                message =
+                    "A candidate with this email or phone already exists. "
+                    + "Use the existing record.",
                 duplicate
             });
         }
 
-        if (error is not null)
+        if (error != null)
         {
-            return BadRequest(new { message = error, duplicate });
+            return BadRequest(new
+            {
+                message = error
+            });
         }
 
-        return CreatedAtAction(nameof(Get), new { id = detail!.CandidateId }, detail);
+        return CreatedAtAction(
+            nameof(Get),
+            new { id = detail!.CandidateId },
+            detail);
     }
 
     [HttpPost("{id:guid}/resume")]
     [Authorize(Policy = Permissions.CandidatesManage)]
-    [RequestSizeLimit(LocalFileStorage.MaxResumeBytes)]
+    [Consumes("multipart/form-data")]
+    [RequestSizeLimit(LocalFileStorage.MaxResumeBytes + 64 * 1024)]
     public async Task<ActionResult<CandidateDetail>> UploadResume(
         Guid id,
-        IFormFile file,
+        [FromForm] IFormFile? file,
         CancellationToken cancellationToken)
     {
-        if (file.Length == 0)
+        if (file is null || file.Length == 0)
         {
-            return BadRequest(new { message = "Empty file." });
+            return BadRequest(new
+            {
+                message = "Please select a non-empty PDF file."
+            });
+        }
+
+        if (file.Length > LocalFileStorage.MaxResumeBytes)
+        {
+            return BadRequest(new
+            {
+                message = "PDF must be 5 MB or smaller."
+            });
         }
 
         await using var stream = file.OpenReadStream();
-        var (detail, error) = await candidates.AttachResumeAsync(id, stream, file.FileName, cancellationToken);
+
+        var (detail, error) = await candidates.AttachResumeAsync(
+            id,
+            stream,
+            file.FileName,
+            cancellationToken);
+
         if (error is not null)
         {
             return BadRequest(new { message = error });
