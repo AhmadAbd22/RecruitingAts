@@ -8,11 +8,12 @@ namespace RecruitingAts.Api.Controllers;
 
 [ApiController]
 [Authorize]
+[Authorize(Policy = Permissions.PoolView)]
+[ResponseCache(NoStore = true)]
 [Route("api/candidates")]
 public class CandidatesController(CandidateService candidates) : ControllerBase
 {
     [HttpGet]
-    [Authorize(Policy = Permissions.PoolView)]
     public async Task<ActionResult<IReadOnlyList<CandidateListItem>>> Search(
         [FromQuery] string? q,
         CancellationToken cancellationToken)
@@ -22,7 +23,6 @@ public class CandidatesController(CandidateService candidates) : ControllerBase
     }
 
     [HttpGet("{id:guid}")]
-    [Authorize(Policy = Permissions.PoolView)]
     public async Task<ActionResult<CandidateDetail>> Get(Guid id, CancellationToken cancellationToken)
     {
         var detail = await candidates.GetAsync(id, cancellationToken);
@@ -162,7 +162,6 @@ public class CandidatesController(CandidateService candidates) : ControllerBase
     }
 
     [HttpGet("{id:guid}/resume")]
-    [Authorize(Policy = Permissions.PoolView)]
     public async Task<IActionResult> DownloadResume(Guid id, CancellationToken cancellationToken)
     {
         var (stream, fileName, error) = await candidates.OpenResumeAsync(id, cancellationToken);

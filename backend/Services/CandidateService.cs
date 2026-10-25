@@ -9,7 +9,10 @@ using PhoneNumbers;
 
 namespace RecruitingAts.Api.Services;
 
-public class CandidateService(AppDbContext db, IFileStorage files)
+public class CandidateService(
+    AppDbContext db,
+    IFileStorage files,
+    ILogger<CandidateService> logger)
 {
     public bool IsPhoneValid(string? phone)
     {
@@ -19,9 +22,7 @@ public class CandidateService(AppDbContext db, IFileStorage files)
         string? query,
         CancellationToken cancellationToken = default)
     {
-        var candidates = db.Candidates
-            .AsNoTracking()
-            .AsQueryable();
+        var candidates = db.Candidates.AsNoTracking();
 
         if (!string.IsNullOrWhiteSpace(query))
         {
@@ -288,9 +289,22 @@ public async Task<(
 
         if (!string.IsNullOrEmpty(previousResumePath))
         {
-            await files.DeleteAsync(
-                previousResumePath,
-                cancellationToken);
+            try
+            {
+                await files.DeleteAsync(
+                    previousResumePath,
+                    CancellationToken.None);
+            }
+            catch (IOException)
+            {
+                logger.LogWarning(
+                    "Previous resume file could not be deleted after replacement.");
+            }
+            catch (UnauthorizedAccessException)
+            {
+                logger.LogWarning(
+                    "Previous resume file could not be deleted after replacement.");
+            }
         }
 
         return (ToDetail(candidate), null);
