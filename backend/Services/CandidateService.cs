@@ -3,26 +3,51 @@ using Microsoft.EntityFrameworkCore;
 using RecruitingAts.Api.Data;
 using RecruitingAts.Api.Data.Entities;
 using RecruitingAts.Api.Storage;
+using System.ComponentModel.DataAnnotations;
+using Microsoft.Data.SqlClient;
+using PhoneNumbers;
 
 namespace RecruitingAts.Api.Services;
 
-public class CandidateService(AppDbContext db, IFileStorage files)
+public class CandidateService(
+    AppDbContext db,
+    IFileStorage files,
+    ILogger<CandidateService> logger)
 {
+    public bool IsPhoneValid(
+    string? phone,
+    string? phoneCountry = null)
+    {
+        return NormalizePhone(phone, phoneCountry) != null;
+    }
     public async Task<IReadOnlyList<CandidateListItem>> SearchAsync(
         string? query,
         CancellationToken cancellationToken = default)
     {
-        var q = db.Candidates.AsNoTracking().AsQueryable();
+        var candidates = db.Candidates.AsNoTracking();
+
         if (!string.IsNullOrWhiteSpace(query))
         {
             var term = query.Trim().ToLowerInvariant();
-            q = q.Where(c =>
+
+            var normalizedPhone = NormalizePhone(term);
+            var phoneVariants = GetPhoneVariants(normalizedPhone);
+
+            var phoneDigits = Regex.IsMatch(
+                term,
+                @"^\+?[0-9()\s.-]+$")
+                    ? Regex.Replace(term, @"[^0-9]", string.Empty)
+                    : string.Empty;
+
+            candidates = candidates.Where(c =>
                 c.FullName.ToLower().Contains(term)
                 || c.Email.ToLower().Contains(term)
-                || c.Phone.Contains(term));
+                || phoneVariants.Contains(c.Phone)
+                || (phoneDigits != ""
+                    && c.Phone.Contains(phoneDigits)));
         }
 
-        return await q
+        return await candidates
             .OrderBy(c => c.FullName)
             .Take(100)
             .Select(c => new CandidateListItem(
@@ -34,7 +59,6 @@ public class CandidateService(AppDbContext db, IFileStorage files)
                 c.ResumePath != null))
             .ToListAsync(cancellationToken);
     }
-
     public async Task<CandidateDetail?> GetAsync(Guid id, CancellationToken cancellationToken = default)
     {
         var c = await db.Candidates.AsNoTracking()
@@ -43,19 +67,37 @@ public class CandidateService(AppDbContext db, IFileStorage files)
     }
 
     public async Task<DuplicateCheckResult> FindDuplicatesAsync(
-        string email,
-        string phone,
+        string? email,
+        string? phone,
         Guid? excludeCandidateId = null,
+        string? phoneCountry = null,
         CancellationToken cancellationToken = default)
     {
-        var normalizedEmail = NormalizeEmail(email);
-        var normalizedPhone = NormalizePhone(phone);
+        var normalizedEmail = NormalizeEmail(
+            email ?? string.Empty);
 
-        var matches = await db.Candidates.AsNoTracking()
+        var normalizedPhone = NormalizePhone(phone, phoneCountry);
+        var phoneVariants = GetPhoneVariants(normalizedPhone);
+
+        if (normalizedEmail.Length == 0 && phoneVariants.Length == 0)
+        {
+            return new DuplicateCheckResult(
+                false,
+                Array.Empty<CandidateListItem>());
+        }
+
+        var matches = await db.Candidates
+            .AsNoTracking()
             .Where(c =>
-                (!excludeCandidateId.HasValue || c.CandidateId != excludeCandidateId)
-                && (c.Email.ToLower() == normalizedEmail
-                    || c.Phone == normalizedPhone))
+                (!excludeCandidateId.HasValue
+                    || c.CandidateId != excludeCandidateId)
+                &&
+                (
+                    (normalizedEmail != ""
+                        && c.Email.ToLower() == normalizedEmail)
+                    ||
+                    phoneVariants.Contains(c.Phone)
+                ))
             .Select(c => new CandidateListItem(
                 c.CandidateId,
                 c.FullName,
@@ -65,42 +107,65 @@ public class CandidateService(AppDbContext db, IFileStorage files)
                 c.ResumePath != null))
             .ToListAsync(cancellationToken);
 
-        return new DuplicateCheckResult(matches.Count > 0, matches);
+        return new DuplicateCheckResult(
+            matches.Count > 0,
+            matches);
     }
 
-    public async Task<(CandidateDetail? Detail, DuplicateCheckResult? Duplicate, string? Error)> CreateAsync(
-        CreateCandidateRequest request,
-        bool confirmDuplicate,
-        CancellationToken cancellationToken = default)
+    public async Task<(
+        CandidateDetail? Detail,
+        DuplicateCheckResult? Duplicate,
+        string? Error)> CreateAsync(
+            CreateCandidateRequest request,
+            Stream resumeContent,
+            string resumeFileName,
+            CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(request.FullName)
             || string.IsNullOrWhiteSpace(request.Email)
             || string.IsNullOrWhiteSpace(request.Phone))
         {
-            return (null, null, "Full name, email, and phone are required.");
+            return (
+                null,
+                null,
+                "Full name, email, and phone are required.");
         }
 
         var email = NormalizeEmail(request.Email);
-        var phone = NormalizePhone(request.Phone);
-        if (phone.Length < 7)
+        var phone = NormalizePhone(request.Phone, request.PhoneCountry);
+
+        if (phone is null)
         {
-            return (null, null, "Phone number looks invalid.");
+            return (
+                null,
+                null,
+                "Enter a valid phone number. Select a valid country "
+                + "for a local number, or include an international "
+                + "code starting with + or 00.");
         }
 
-        var duplicates = await FindDuplicatesAsync(email, phone, cancellationToken: cancellationToken);
-        if (duplicates.IsDuplicate && !confirmDuplicate)
+        var duplicates = await FindDuplicatesAsync(
+            email,
+            phone,
+            cancellationToken: cancellationToken);
+
+        if (duplicates.IsDuplicate)
         {
             return (null, duplicates, null);
         }
 
-        if (await db.Candidates.AnyAsync(c => c.Email.ToLower() == email, cancellationToken))
-        {
-            return (null, duplicates, "A candidate with this email already exists. Use the existing record.");
-        }
+        string resumePath;
 
-        if (await db.Candidates.AnyAsync(c => c.Phone == phone, cancellationToken))
+        try
         {
-            return (null, duplicates, "A candidate with this phone already exists. Use the existing record.");
+            resumePath = await files.SaveAsync(
+                resumeContent,
+                resumeFileName,
+                cancellationToken);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return (null, null, ex.Message);
         }
 
         var candidate = new Candidate
@@ -109,15 +174,59 @@ public class CandidateService(AppDbContext db, IFileStorage files)
             FullName = request.FullName.Trim(),
             Email = email,
             Phone = phone,
-            Skills = string.IsNullOrWhiteSpace(request.Skills) ? null : request.Skills.Trim(),
-            Source = string.IsNullOrWhiteSpace(request.Source) ? null : request.Source.Trim(),
+
+            Skills = string.IsNullOrWhiteSpace(request.Skills)
+                ? null
+                : request.Skills.Trim(),
+
+            Source = string.IsNullOrWhiteSpace(request.Source)
+                ? null
+                : request.Source.Trim(),
+
             ConsentDate = request.ConsentDate,
+            ResumePath = resumePath,
             CreatedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow
         };
 
         db.Candidates.Add(candidate);
-        await db.SaveChangesAsync(cancellationToken);
+
+        try
+        {
+            await db.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateException ex) when (
+            ex.InnerException is SqlException sqlException
+            && (sqlException.Number == 2601
+                || sqlException.Number == 2627))
+        {
+            db.Entry(candidate).State = EntityState.Detached;
+
+            await files.DeleteAsync(
+                resumePath,
+                CancellationToken.None);
+
+            duplicates = await FindDuplicatesAsync(
+                email,
+                phone,
+                cancellationToken: cancellationToken);
+
+            if (!duplicates.IsDuplicate)
+            {
+                throw;
+            }
+
+            return (null, duplicates, null);
+        }
+        catch
+        {
+            await files.DeleteAsync(
+                resumePath,
+                CancellationToken.None);
+
+            throw;
+        }
+
         return (ToDetail(candidate), null, null);
     }
 
@@ -127,28 +236,68 @@ public class CandidateService(AppDbContext db, IFileStorage files)
         string fileName,
         CancellationToken cancellationToken = default)
     {
-        var candidate = await db.Candidates.FirstOrDefaultAsync(c => c.CandidateId == candidateId, cancellationToken);
+        var candidate = await db.Candidates.FirstOrDefaultAsync(
+            c => c.CandidateId == candidateId,
+            cancellationToken);
+
         if (candidate is null)
         {
             return (null, "Candidate not found.");
         }
 
+        string newResumePath;
+
         try
         {
-            if (!string.IsNullOrEmpty(candidate.ResumePath))
-            {
-                await files.DeleteAsync(candidate.ResumePath, cancellationToken);
-            }
-
-            candidate.ResumePath = await files.SaveAsync(content, fileName, cancellationToken);
-            candidate.UpdatedAt = DateTime.UtcNow;
-            await db.SaveChangesAsync(cancellationToken);
-            return (ToDetail(candidate), null);
+            newResumePath = await files.SaveAsync(
+                content,
+                fileName,
+                cancellationToken);
         }
         catch (InvalidOperationException ex)
         {
             return (null, ex.Message);
         }
+
+        var previousResumePath = candidate.ResumePath;
+
+        candidate.ResumePath = newResumePath;
+        candidate.UpdatedAt = DateTime.UtcNow;
+
+        try
+        {
+            await db.SaveChangesAsync(cancellationToken);
+        }
+        catch
+        {
+            await files.DeleteAsync(
+                newResumePath,
+                CancellationToken.None);
+
+            throw;
+        }
+
+        if (!string.IsNullOrEmpty(previousResumePath))
+        {
+            try
+            {
+                await files.DeleteAsync(
+                    previousResumePath,
+                    CancellationToken.None);
+            }
+            catch (IOException)
+            {
+                logger.LogWarning(
+                    "Previous resume file could not be deleted after replacement.");
+            }
+            catch (UnauthorizedAccessException)
+            {
+                logger.LogWarning(
+                    "Previous resume file could not be deleted after replacement.");
+            }
+        }
+
+        return (ToDetail(candidate), null);
     }
 
     public async Task<(Stream? Stream, string? FileName, string? Error)> OpenResumeAsync(
@@ -178,9 +327,107 @@ public class CandidateService(AppDbContext db, IFileStorage files)
 
     private static string NormalizeEmail(string email) => email.Trim().ToLowerInvariant();
 
-    private static string NormalizePhone(string phone) =>
-        Regex.Replace(phone, @"\D", string.Empty);
 
+    private static string? NormalizePhone(
+        string? phone,
+        string? phoneCountry = null)
+    {
+        if (string.IsNullOrWhiteSpace(phone) || phone.Length > 32)
+        {
+            return null;
+        }
+
+        var compact = Regex.Replace(
+            phone.Trim(),
+            @"[\s().-]",
+            string.Empty);
+
+        if (compact.StartsWith("00"))
+        {
+            compact = "+" + compact.Substring(2);
+        }
+
+        if (!Regex.IsMatch(compact, @"^\+?[0-9]+$"))
+        {
+            return null;
+        }
+
+        var phoneUtil = PhoneNumberUtil.GetInstance();
+
+        string? region = null;
+
+        if (!string.IsNullOrWhiteSpace(phoneCountry))
+        {
+            region = phoneCountry.Trim().ToUpperInvariant();
+
+            if (!phoneUtil.GetSupportedRegions().Contains(region))
+            {
+                return null;
+            }
+        }
+
+        if (compact.StartsWith("+"))
+        {
+            // The number already identifies its country.
+            region = null;
+        }
+        else if (region is null)
+        {
+            // A local number needs a selected country.
+            return null;
+        }
+
+        try
+        {
+            var parsed = phoneUtil.Parse(compact, region);
+
+            if (!phoneUtil.IsValidNumber(parsed))
+            {
+                return null;
+            }
+
+            // For local input, also check the selected country's rules.
+            if (region is not null
+                && !phoneUtil.IsValidNumberForRegion(parsed, region))
+            {
+                return null;
+            }
+
+            var normalized = phoneUtil.Format(
+                parsed,
+                PhoneNumberFormat.E164);
+
+            var digitCount = normalized.Length - 1;
+
+            if (digitCount > 15)
+            {
+                return null;
+            }
+
+            return normalized;
+        }
+        catch (NumberParseException)
+        {
+            return null;
+        }
+    }
+
+    private static string[] GetPhoneVariants(string? normalizedPhone)
+    {
+        if (normalizedPhone is null)
+        {
+            return Array.Empty<string>();
+        }
+
+        var digits = normalizedPhone.Substring(1);
+
+        return new[]
+        {
+        normalizedPhone,
+        digits,
+        "00" + digits
+    };
+    }
     private static CandidateDetail ToDetail(Candidate c) =>
         new(
             c.CandidateId,
@@ -195,12 +442,30 @@ public class CandidateService(AppDbContext db, IFileStorage files)
 }
 
 public record CreateCandidateRequest(
+    [Required, StringLength(200)]
     string FullName,
+
+    [Required, EmailAddress, StringLength(256)]
     string Email,
+
+    [Required, StringLength(
+    32,
+    ErrorMessage = "Phone cannot exceed 32 characters.")]
     string Phone,
+
+    [StringLength(1000)]
     string? Skills,
+
+    [StringLength(100)]
     string? Source,
-    DateTime? ConsentDate);
+
+    DateTime? ConsentDate,
+
+    [StringLength(
+        2,
+        MinimumLength = 2,
+        ErrorMessage = "PhoneCountry must be a two-letter country code.")]
+    string? PhoneCountry = null);
 
 public record CandidateListItem(
     Guid CandidateId,
@@ -221,6 +486,22 @@ public record CandidateDetail(
     bool HasResume,
     DateTime CreatedAt);
 
+public record DuplicateCheckRequest(
+    [EmailAddress, StringLength(256)]
+    string? Email,
+
+    [StringLength(
+        32,
+        ErrorMessage = "Phone cannot exceed 32 characters.")]
+    string? Phone,
+
+    [StringLength(
+        2,
+        MinimumLength = 2,
+        ErrorMessage = "PhoneCountry must be a two-letter country code.")]
+    string? PhoneCountry = null);
+
 public record DuplicateCheckResult(
     bool IsDuplicate,
     IReadOnlyList<CandidateListItem> Matches);
+
