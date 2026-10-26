@@ -37,10 +37,7 @@
       margin: 0 0 0.5rem;
       line-height: 1.05;
     }
-    .brand em {
-      font-style: normal;
-      color: var(--accent);
-    }
+    .brand em { font-style: normal; color: var(--accent); }
     .lead { color: var(--muted); margin: 0 0 2rem; font-size: 1.05rem; max-width: 34rem; }
     a.card {
       display: block;
@@ -63,14 +60,19 @@
 <body>
   <main>
     <h1 class="brand">Recruiting <em>ATS</em></h1>
-    <p class="lead">UI mockups for TEA-14 applications / pipeline. Built with Open Design <code>frontend-design</code> craft — sample JSON matches backend DTOs.</p>
+    <p class="lead">Local UI mockups. Prefer the full demo for the Day‑5 walkthrough — nothing here is committed unless you choose to.</p>
 
-    <a class="card" href="./pipeline-board.html">
-      <h2>Pipeline board</h2>
-      <p>Kanban by stage, scoped filters, stage move drawer with disposition gate, add-to-requisition modal.</p>
+    <a class="card" href="./demo/index.html">
+      <h2>Full interactive demo</h2>
+      <p>Login personas, requisitions workflow, talent pool + duplicates, pipeline + disposition, interviews + feedback independence, compensation audit.</p>
     </a>
 
-    <p class="meta">Design tokens: <a href="./DESIGN.md">DESIGN.md</a></p>
+    <a class="card" href="./pipeline-board.html">
+      <h2>Pipeline board only</h2>
+      <p>Earlier single-screen kanban mock for applications API shapes.</p>
+    </a>
+
+    <p class="meta">Design tokens: <a href="./DESIGN.md">DESIGN.md</a> · Missing APIs: <a href="./API_GAPS.md">API_GAPS.md</a></p>
   </main>
 </body>
 </html>

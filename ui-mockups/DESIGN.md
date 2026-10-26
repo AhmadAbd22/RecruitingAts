@@ -51,8 +51,14 @@ Scale: 12 / 14 / 16 / 20 / 28 / 36. Prefer 14–16 for board density.
 3. Stage confirm: brief accent flash on target column
 
 ## API contracts this UI expects
-See sample payloads embedded in `pipeline-board.html` (`window.__API__`).
-Keyed to:
+Full interactive demo: `demo/` (login → requisitions → pool → pipeline → interviews → stages → audit).
+
+See also **`API_GAPS.md`** for contracts that are UI-complete but not yet in the backend.
+
+Available-shaped samples:
 - `GET /api/applications/pipeline` → `ApplicationPipelineItemDto[]`
 - `POST /api/applications` → create
 - `PATCH /api/applications/{id}/stage` → stage + optional `dispositionReason`
+- Candidates / requisitions / auth as in `backend/Controllers`
+
+Yellow **API gap** banners in the demo mark forward UI (interviews, stage admin, match score field).
