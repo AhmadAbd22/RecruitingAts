@@ -14,9 +14,11 @@ public class CandidateService(
     IFileStorage files,
     ILogger<CandidateService> logger)
 {
-    public bool IsPhoneValid(string? phone)
+    public bool IsPhoneValid(
+    string? phone,
+    string? phoneCountry = null)
     {
-        return NormalizePhone(phone) != null;
+        return NormalizePhone(phone, phoneCountry) != null;
     }
     public async Task<IReadOnlyList<CandidateListItem>> SearchAsync(
         string? query,
@@ -28,8 +30,8 @@ public class CandidateService(
         {
             var term = query.Trim().ToLowerInvariant();
 
-            var phoneVariants = GetPhoneVariants(
-                NormalizePhone(term));
+            var normalizedPhone = NormalizePhone(term);
+            var phoneVariants = GetPhoneVariants(normalizedPhone);
 
             var phoneDigits = Regex.IsMatch(
                 term,
@@ -37,25 +39,12 @@ public class CandidateService(
                     ? Regex.Replace(term, @"[^0-9]", string.Empty)
                     : string.Empty;
 
-            var internationalDigits = phoneDigits;
-
-            if (phoneDigits.StartsWith("00"))
-            {
-                internationalDigits = phoneDigits[2..];
-            }
-            else if (phoneDigits.StartsWith("0"))
-            {
-                internationalDigits = "92" + phoneDigits[1..];
-            }
-
             candidates = candidates.Where(c =>
                 c.FullName.ToLower().Contains(term)
                 || c.Email.ToLower().Contains(term)
                 || phoneVariants.Contains(c.Phone)
                 || (phoneDigits != ""
-                    && c.Phone.Contains(phoneDigits))
-                || (internationalDigits != ""
-                    && c.Phone.Contains(internationalDigits)));
+                    && c.Phone.Contains(phoneDigits)));
         }
 
         return await candidates
@@ -70,7 +59,6 @@ public class CandidateService(
                 c.ResumePath != null))
             .ToListAsync(cancellationToken);
     }
-
     public async Task<CandidateDetail?> GetAsync(Guid id, CancellationToken cancellationToken = default)
     {
         var c = await db.Candidates.AsNoTracking()
@@ -82,12 +70,13 @@ public class CandidateService(
         string? email,
         string? phone,
         Guid? excludeCandidateId = null,
+        string? phoneCountry = null,
         CancellationToken cancellationToken = default)
     {
         var normalizedEmail = NormalizeEmail(
             email ?? string.Empty);
 
-        var normalizedPhone = NormalizePhone(phone);
+        var normalizedPhone = NormalizePhone(phone, phoneCountry);
         var phoneVariants = GetPhoneVariants(normalizedPhone);
 
         if (normalizedEmail.Length == 0 && phoneVariants.Length == 0)
@@ -123,122 +112,123 @@ public class CandidateService(
             matches);
     }
 
-public async Task<(
-    CandidateDetail? Detail,
-    DuplicateCheckResult? Duplicate,
-    string? Error)> CreateAsync(
-        CreateCandidateRequest request,
-        Stream resumeContent,
-        string resumeFileName,
-        CancellationToken cancellationToken = default)
-{
-    if (string.IsNullOrWhiteSpace(request.FullName)
-        || string.IsNullOrWhiteSpace(request.Email)
-        || string.IsNullOrWhiteSpace(request.Phone))
+    public async Task<(
+        CandidateDetail? Detail,
+        DuplicateCheckResult? Duplicate,
+        string? Error)> CreateAsync(
+            CreateCandidateRequest request,
+            Stream resumeContent,
+            string resumeFileName,
+            CancellationToken cancellationToken = default)
     {
-        return (
-            null,
-            null,
-            "Full name, email, and phone are required.");
-    }
+        if (string.IsNullOrWhiteSpace(request.FullName)
+            || string.IsNullOrWhiteSpace(request.Email)
+            || string.IsNullOrWhiteSpace(request.Phone))
+        {
+            return (
+                null,
+                null,
+                "Full name, email, and phone are required.");
+        }
 
-    var email = NormalizeEmail(request.Email);
-    var phone = NormalizePhone(request.Phone);
+        var email = NormalizeEmail(request.Email);
+        var phone = NormalizePhone(request.Phone, request.PhoneCountry);
 
-    if (phone is null)
-    {
-        return (
-            null,
-            null,
-            "Enter a valid phone number, such as "
-            + "03123456789 or +923123456789.");
-    }
+        if (phone is null)
+        {
+            return (
+                null,
+                null,
+                "Enter a valid phone number. Select a valid country "
+                + "for a local number, or include an international "
+                + "code starting with + or 00.");
+        }
 
-    var duplicates = await FindDuplicatesAsync(
-        email,
-        phone,
-        cancellationToken: cancellationToken);
-
-    if (duplicates.IsDuplicate)
-    {
-        return (null, duplicates, null);
-    }
-
-    string resumePath;
-
-    try
-    {
-        resumePath = await files.SaveAsync(
-            resumeContent,
-            resumeFileName,
-            cancellationToken);
-    }
-    catch (InvalidOperationException ex)
-    {
-        return (null, null, ex.Message);
-    }
-
-    var candidate = new Candidate
-    {
-        CandidateId = Guid.NewGuid(),
-        FullName = request.FullName.Trim(),
-        Email = email,
-        Phone = phone,
-
-        Skills = string.IsNullOrWhiteSpace(request.Skills)
-            ? null
-            : request.Skills.Trim(),
-
-        Source = string.IsNullOrWhiteSpace(request.Source)
-            ? null
-            : request.Source.Trim(),
-
-        ConsentDate = request.ConsentDate,
-        ResumePath = resumePath,
-        CreatedAt = DateTime.UtcNow,
-        UpdatedAt = DateTime.UtcNow
-    };
-
-    db.Candidates.Add(candidate);
-
-    try
-    {
-        await db.SaveChangesAsync(cancellationToken);
-    }
-    catch (DbUpdateException ex) when (
-        ex.InnerException is SqlException sqlException
-        && (sqlException.Number == 2601
-            || sqlException.Number == 2627))
-    {
-        db.Entry(candidate).State = EntityState.Detached;
-
-        await files.DeleteAsync(
-            resumePath,
-            CancellationToken.None);
-
-        duplicates = await FindDuplicatesAsync(
+        var duplicates = await FindDuplicatesAsync(
             email,
             phone,
             cancellationToken: cancellationToken);
 
-        if (!duplicates.IsDuplicate)
+        if (duplicates.IsDuplicate)
         {
+            return (null, duplicates, null);
+        }
+
+        string resumePath;
+
+        try
+        {
+            resumePath = await files.SaveAsync(
+                resumeContent,
+                resumeFileName,
+                cancellationToken);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return (null, null, ex.Message);
+        }
+
+        var candidate = new Candidate
+        {
+            CandidateId = Guid.NewGuid(),
+            FullName = request.FullName.Trim(),
+            Email = email,
+            Phone = phone,
+
+            Skills = string.IsNullOrWhiteSpace(request.Skills)
+                ? null
+                : request.Skills.Trim(),
+
+            Source = string.IsNullOrWhiteSpace(request.Source)
+                ? null
+                : request.Source.Trim(),
+
+            ConsentDate = request.ConsentDate,
+            ResumePath = resumePath,
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow
+        };
+
+        db.Candidates.Add(candidate);
+
+        try
+        {
+            await db.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateException ex) when (
+            ex.InnerException is SqlException sqlException
+            && (sqlException.Number == 2601
+                || sqlException.Number == 2627))
+        {
+            db.Entry(candidate).State = EntityState.Detached;
+
+            await files.DeleteAsync(
+                resumePath,
+                CancellationToken.None);
+
+            duplicates = await FindDuplicatesAsync(
+                email,
+                phone,
+                cancellationToken: cancellationToken);
+
+            if (!duplicates.IsDuplicate)
+            {
+                throw;
+            }
+
+            return (null, duplicates, null);
+        }
+        catch
+        {
+            await files.DeleteAsync(
+                resumePath,
+                CancellationToken.None);
+
             throw;
         }
 
-        return (null, duplicates, null);
+        return (ToDetail(candidate), null, null);
     }
-    catch
-    {
-        await files.DeleteAsync(
-            resumePath,
-            CancellationToken.None);
-
-        throw;
-    }
-
-    return (ToDetail(candidate), null, null);
-}
 
     public async Task<(CandidateDetail? Detail, string? Error)> AttachResumeAsync(
         Guid candidateId,
@@ -338,9 +328,11 @@ public async Task<(
     private static string NormalizeEmail(string email) => email.Trim().ToLowerInvariant();
 
 
-    private static string? NormalizePhone(string? phone)
+    private static string? NormalizePhone(
+        string? phone,
+        string? phoneCountry = null)
     {
-        if (string.IsNullOrWhiteSpace(phone))
+        if (string.IsNullOrWhiteSpace(phone) || phone.Length > 32)
         {
             return null;
         }
@@ -350,6 +342,11 @@ public async Task<(
             @"[\s().-]",
             string.Empty);
 
+        if (compact.StartsWith("00"))
+        {
+            compact = "+" + compact.Substring(2);
+        }
+
         if (!Regex.IsMatch(compact, @"^\+?[0-9]+$"))
         {
             return null;
@@ -357,11 +354,41 @@ public async Task<(
 
         var phoneUtil = PhoneNumberUtil.GetInstance();
 
+        string? region = null;
+
+        if (!string.IsNullOrWhiteSpace(phoneCountry))
+        {
+            region = phoneCountry.Trim().ToUpperInvariant();
+
+            if (!phoneUtil.GetSupportedRegions().Contains(region))
+            {
+                return null;
+            }
+        }
+
+        if (compact.StartsWith("+"))
+        {
+            // The number already identifies its country.
+            region = null;
+        }
+        else if (region is null)
+        {
+            // A local number needs a selected country.
+            return null;
+        }
+
         try
         {
-            var parsed = phoneUtil.Parse(compact, "PK");
+            var parsed = phoneUtil.Parse(compact, region);
 
             if (!phoneUtil.IsValidNumber(parsed))
+            {
+                return null;
+            }
+
+            // For local input, also check the selected country's rules.
+            if (region is not null
+                && !phoneUtil.IsValidNumberForRegion(parsed, region))
             {
                 return null;
             }
@@ -370,7 +397,9 @@ public async Task<(
                 parsed,
                 PhoneNumberFormat.E164);
 
-            if (normalized.Length - 1 > 15)
+            var digitCount = normalized.Length - 1;
+
+            if (digitCount > 15)
             {
                 return null;
             }
@@ -392,23 +421,13 @@ public async Task<(
 
         var digits = normalizedPhone.Substring(1);
 
-        var variants = new List<string>
-    {
+        return new[]
+        {
         normalizedPhone,
         digits,
         "00" + digits
     };
-
-        if (normalizedPhone.StartsWith(
-            "+92",
-            StringComparison.Ordinal))
-        {
-            variants.Add("0" + digits.Substring(2));
-        }
-
-        return variants.ToArray();
     }
-
     private static CandidateDetail ToDetail(Candidate c) =>
         new(
             c.CandidateId,
@@ -430,8 +449,8 @@ public record CreateCandidateRequest(
     string Email,
 
     [Required, StringLength(
-    15,
-    ErrorMessage = "Phone cannot exceed 15 characters.")]
+    32,
+    ErrorMessage = "Phone cannot exceed 32 characters.")]
     string Phone,
 
     [StringLength(1000)]
@@ -440,7 +459,13 @@ public record CreateCandidateRequest(
     [StringLength(100)]
     string? Source,
 
-    DateTime? ConsentDate);
+    DateTime? ConsentDate,
+
+    [StringLength(
+        2,
+        MinimumLength = 2,
+        ErrorMessage = "PhoneCountry must be a two-letter country code.")]
+    string? PhoneCountry = null);
 
 public record CandidateListItem(
     Guid CandidateId,
@@ -466,9 +491,15 @@ public record DuplicateCheckRequest(
     string? Email,
 
     [StringLength(
-        15,
-        ErrorMessage = "Phone cannot exceed 15 characters.")]
-    string? Phone);
+        32,
+        ErrorMessage = "Phone cannot exceed 32 characters.")]
+    string? Phone,
+
+    [StringLength(
+        2,
+        MinimumLength = 2,
+        ErrorMessage = "PhoneCountry must be a two-letter country code.")]
+    string? PhoneCountry = null);
 
 public record DuplicateCheckResult(
     bool IsDuplicate,

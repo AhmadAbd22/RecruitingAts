@@ -5,7 +5,6 @@ using RecruitingAts.Api.Auth;
 using RecruitingAts.Api.Data;
 using RecruitingAts.Api.Services;
 using RecruitingAts.Api.Storage;
-using Microsoft.EntityFrameworkCore.Diagnostics;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -22,12 +21,8 @@ builder.Services.AddSwaggerGen();
 builder.Services.AddDbContext<AppDbContext>(options =>
     {
         options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection"));
-        options.EnableSensitiveDataLogging(false);
 
-        options.ConfigureWarnings(warnings => warnings.Ignore(
-            RelationalEventId.CommandError,
-            CoreEventId.SaveChangesFailed,
-            CoreEventId.QueryIterationFailed));
+        options.EnableSensitiveDataLogging(false);
     });
 
 builder.Services
