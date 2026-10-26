@@ -16,6 +16,8 @@ builder.Services.AddControllers()
 
 builder.Services.AddOpenApi();
 
+builder.Services.AddSwaggerGen();
+
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
 
@@ -73,6 +75,7 @@ builder.Services.AddScoped<IAuditService, AuditService>();
 builder.Services.AddScoped<IRequisitionScopeService, RequisitionScopeService>();
 builder.Services.AddScoped<RequisitionService>();
 builder.Services.AddScoped<CandidateService>();
+builder.Services.AddScoped<ApplicationService>();
 
 var app = builder.Build();
 
@@ -81,6 +84,8 @@ await DbSeeder.SeedAsync(app.Services);
 if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();
+    app.UseSwagger();
+    app.UseSwaggerUI();
 }
 
 app.UseCors("FrontendDev");
