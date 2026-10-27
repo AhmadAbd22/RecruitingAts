@@ -1,54 +1,35 @@
-# React + TypeScript + Vite
+# Recruiting ATS — Frontend
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Vite + React 19 + React Router. Mockup reference: [`../ui-mockups/demo`](../ui-mockups/demo). API gaps: [`../ui-mockups/API_GAPS.md`](../ui-mockups/API_GAPS.md).
 
-Currently, two official plugins are available:
+## Run
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
-
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
-
-```js
-export default tseslint.config({
-  extends: [
-    // Remove ...tseslint.configs.recommended and replace with this
-    ...tseslint.configs.recommendedTypeChecked,
-    // Alternatively, use this for stricter rules
-    ...tseslint.configs.strictTypeChecked,
-    // Optionally, add this for stylistic rules
-    ...tseslint.configs.stylisticTypeChecked,
-  ],
-  languageOptions: {
-    // other options...
-    parserOptions: {
-      project: ['./tsconfig.node.json', './tsconfig.app.json'],
-      tsconfigRootDir: import.meta.dirname,
-    },
-  },
-})
+```powershell
+cd frontend
+npm install
+npm run dev
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+App: http://localhost:5173  
+API proxy: `/api` → `http://localhost:5277` (see `vite.config.ts`).
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+## Kickstart layout
 
-export default tseslint.config({
-  plugins: {
-    // Add the react-x and react-dom plugins
-    'react-x': reactX,
-    'react-dom': reactDom,
-  },
-  rules: {
-    // other rules...
-    // Enable its recommended typescript rules
-    ...reactX.configs['recommended-typescript'].rules,
-    ...reactDom.configs.recommended.rules,
-  },
-})
-```
+| Area | Path | Owner |
+|------|------|--------|
+| Auth + nav shell | `src/auth`, `src/layout`, `src/routes.tsx` | Tayyab |
+| Shared plug-ins | `src/components/shared` | Everyone (ask before big changes) |
+| Requisitions | `src/components/requisitions`, `src/pages/requisitions` | Amina |
+| Candidates / pool | `src/components/candidates`, `src/pages/pool` | Ibtesam |
+| Pipeline | `src/components/pipeline`, `src/pages/pipeline` | Abdul-Manan |
+| Interviews | `src/components/interviews`, `src/pages/interviews` | Tayyab / Abdul-Manan |
+| Stages | `src/components/stages`, `src/pages/stages` | Amina |
+| Comp audit | `src/pages/audit` | Tayyab |
+
+**Workflow:** compose your page from plug-in components (typed props + barrels). Prefer appending to `routes.tsx` / shared barrels rather than reformatting whole files (merge-conflict hygiene).
+
+## Auth / nav
+
+- `AuthProvider` loads `GET /api/auth/me`, exposes `login` / `register` / `logout`.
+- `RequireAuth` redirects to `/login`.
+- `AppShell` shows nav links only when the signed-in user has the matching permission.
