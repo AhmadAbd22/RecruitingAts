@@ -131,6 +131,14 @@ public class CandidateService(
                 "Full name, email, and phone are required.");
         }
 
+        if (string.IsNullOrWhiteSpace(request.Source))
+        {
+            return (
+                null,
+                null,
+                "Candidate source is required.");
+        }
+
         var email = NormalizeEmail(request.Email);
         var phone = NormalizePhone(request.Phone, request.PhoneCountry);
 
@@ -179,9 +187,7 @@ public class CandidateService(
                 ? null
                 : request.Skills.Trim(),
 
-            Source = string.IsNullOrWhiteSpace(request.Source)
-                ? null
-                : request.Source.Trim(),
+            Source = request.Source.Trim(),
 
             ConsentDate = request.ConsentDate,
             ResumePath = resumePath,
@@ -456,8 +462,9 @@ public record CreateCandidateRequest(
     [StringLength(1000)]
     string? Skills,
 
+    [Required(ErrorMessage = "Candidate source is required.")]
     [StringLength(100)]
-    string? Source,
+    string Source,
 
     DateTime? ConsentDate,
 
