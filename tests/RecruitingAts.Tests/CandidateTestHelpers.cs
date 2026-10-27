@@ -10,7 +10,7 @@ namespace RecruitingAts.Tests;
 
 internal static class CandidateTestHelpers
 {
-    /// <summary>Valid PK mobile used across talent-pool tests (E.164: +923001234567).</summary>
+    /// <summary>Valid PK mobile (E.164: +923001234567).</summary>
     public const string SampleLocalPhone = "03001234567";
     public const string SampleE164Phone = "+923001234567";
     public const string SampleCountry = "PK";
@@ -30,13 +30,15 @@ internal static class CandidateTestHelpers
     public static Candidate ExistingCandidate(
         string email = "existing@example.com",
         string phone = SampleE164Phone,
-        string? resumePath = "existing.pdf") =>
+        string? resumePath = "existing.pdf",
+        string? source = "Referral") =>
         new()
         {
             CandidateId = Guid.NewGuid(),
             FullName = "Existing Candidate",
             Email = email,
             Phone = phone,
+            Source = source,
             ResumePath = resumePath
         };
 
@@ -44,19 +46,19 @@ internal static class CandidateTestHelpers
         string fullName = "Ada Lovelace",
         string email = "ada@example.com",
         string phone = SampleLocalPhone,
-        string? phoneCountry = SampleCountry) =>
+        string? phoneCountry = SampleCountry,
+        string source = "Referral") =>
         new(
             FullName: fullName,
             Email: email,
             Phone: phone,
             Skills: null,
-            Source: null,
+            Source: source,
             ConsentDate: null,
             PhoneCountry: phoneCountry);
 
     public static MemoryStream MinimalPdf(string marker = "test")
     {
-        // LocalFileStorage requires a %PDF- header; body can be tiny for unit tests.
         var bytes = Encoding.ASCII.GetBytes("%PDF-1.4\n" + marker + "\n%%EOF\n");
         return new MemoryStream(bytes);
     }
@@ -66,7 +68,6 @@ internal static class CandidateTestHelpers
         public List<string> Saved { get; } = [];
         public List<string> Deleted { get; } = [];
         public bool ThrowOnSave { get; set; }
-        public string? ThrowOnDeletePath { get; set; }
 
         public Task<string> SaveAsync(
             Stream content,
@@ -92,11 +93,6 @@ internal static class CandidateTestHelpers
             string relativePath,
             CancellationToken cancellationToken = default)
         {
-            if (ThrowOnDeletePath == relativePath)
-            {
-                throw new IOException("locked");
-            }
-
             Deleted.Add(relativePath);
             return Task.CompletedTask;
         }

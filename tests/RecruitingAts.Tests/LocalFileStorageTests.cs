@@ -6,9 +6,6 @@ using RecruitingAts.Api.Storage;
 
 namespace RecruitingAts.Tests;
 
-/// <summary>
-/// Covers LocalFileStorage.SaveAsync PDF checks (talent-pool resume uploads).
-/// </summary>
 public class LocalFileStorageTests : IDisposable
 {
     private readonly string _root;

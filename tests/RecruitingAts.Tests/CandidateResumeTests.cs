@@ -2,9 +2,6 @@ using Microsoft.EntityFrameworkCore;
 
 namespace RecruitingAts.Tests;
 
-/// <summary>
-/// Resume attach/replace behavior for talent-pool candidates.
-/// </summary>
 public class CandidateResumeTests
 {
     [Fact]
@@ -26,9 +23,7 @@ public class CandidateResumeTests
         Assert.True(detail.HasResume);
         Assert.Single(files.Saved);
         Assert.Contains("old.pdf", files.Deleted);
-
-        var stored = await db.Candidates.SingleAsync();
-        Assert.Equal(files.Saved[0], stored.ResumePath);
+        Assert.Equal(files.Saved[0], (await db.Candidates.SingleAsync()).ResumePath);
     }
 
     [Fact]
