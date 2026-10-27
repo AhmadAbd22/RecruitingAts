@@ -23,7 +23,9 @@ Returns an array of up to 100 candidates, ordered by full name.
 ]
 ```
 
-`source` can be `null`. `hasResume` indicates whether a resume path is set on the candidate record.
+`source` contains the candidate's recorded source, such as `Referral`, `LinkedIn` or `Agency`. It can be `null` for older records created before source was required. New candidates must have a source. `hasResume` indicates whether a resume path is set on the candidate record.
+
+Search results do not include `consentDate`; that field is returned in candidate details.
 
 When no candidates match, the response is:
 
@@ -47,13 +49,17 @@ Returns a candidate detail object:
   "phone": "+923123456789",
   "skills": ".NET, SQL Server",
   "source": "Referral",
-  "consentDate": null,
+  "consentDate": "2026-10-27T09:00:00",
   "hasResume": true,
   "createdAt": "2026-10-27T09:00:00"
 }
 ```
 
-`skills`, `source` and `consentDate` can be `null`. `createdAt` and a non-null `consentDate` are returned as date/time strings.
+`source` contains the saved source with leading and trailing spaces removed for newly created candidates. Older records can still return `null`.
+
+`consentDate` contains the consent date supplied when the candidate was created. It is returned as a date/time string, as shown above, or `null` if no date was supplied. The API does not automatically set this field to the creation date.
+
+`skills` can also be `null`. `createdAt` is returned as a date/time string.
 
 ### 404 Not Found
 
@@ -115,6 +121,28 @@ Each item in `matches` has the same fields as a search result. Multiple matching
 ### 201 Created
 
 Returns the candidate detail object shown in section 2. The returned `phone` is normalized to international E.164 format, and `hasResume` is `true` after successful creation. The `Location` response header points to the candidate details endpoint.
+
+The returned `source` is the saved, trimmed value. For example, a source of `" Referral "` is returned as `"Referral"`. The returned `consentDate` is the supplied date, or `null` when it was omitted.
+
+### 400 Bad Request - source or consent date validation
+
+Creating a candidate without a source, with a blank source, or with a source longer than 100 characters returns a field-validation response. For example, a missing source produces:
+
+```json
+{
+  "type": "https://tools.ietf.org/html/rfc9110#section-15.5.1",
+  "title": "One or more validation errors occurred.",
+  "status": 400,
+  "errors": {
+    "Source": [
+      "Candidate source is required."
+    ]
+  },
+  "traceId": "example-request-trace-id"
+}
+```
+
+An invalid consent date, such as text that cannot be read as a date, also returns a field-validation response. The `errors` object identifies the affected field; its exact message depends on the invalid value. Omitting the consent date is allowed and does not cause a validation error.
 
 ### 409 Conflict - duplicate candidate
 
