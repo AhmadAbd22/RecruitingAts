@@ -28,23 +28,37 @@ public class CandidateService(
 
         if (!string.IsNullOrWhiteSpace(query))
         {
+            // Example search query: "0300 123-4567"
             var term = query.Trim().ToLowerInvariant();
+            // term → "0300 123-4567"
 
+            // Without a country code this returns null for local numbers.
+            // "+923001234567" would normalize; "0300 123-4567" alone does not.
             var normalizedPhone = NormalizePhone(term);
             var phoneVariants = GetPhoneVariants(normalizedPhone);
 
+            // Keep digits only from a phone-like query: "0300 123-4567" → "03001234567"
             var phoneDigits = Regex.IsMatch(
                 term,
                 @"^\+?[0-9()\s.-]+$")
                     ? Regex.Replace(term, @"[^0-9]", string.Empty)
                     : string.Empty;
 
+            // Drop leading trunk zeros: "03001234567" → "3001234567"
+            // Those digits appear inside stored E.164 "+923001234567".
+            var significantDigits = phoneDigits.TrimStart('0');
+
             candidates = candidates.Where(c =>
                 c.FullName.ToLower().Contains(term)
                 || c.Email.ToLower().Contains(term)
+                // Exact match against any known form of the number
                 || phoneVariants.Contains(c.Phone)
+                // Rare: stored value still has the same digit string including trunk 0
                 || (phoneDigits != ""
-                    && c.Phone.Contains(phoneDigits)));
+                    && c.Phone.Contains(phoneDigits))
+                // Local query vs E.164 row: "+923001234567".Contains("3001234567") → true
+                || (significantDigits.Length >= 7
+                    && c.Phone.Contains(significantDigits)));
         }
 
         return await candidates
@@ -334,6 +348,14 @@ public class CandidateService(
     private static string NormalizeEmail(string email) => email.Trim().ToLowerInvariant();
 
 
+    /// <summary>
+    /// Turns user input into one E.164 value used for storage and matching.
+    /// Example walkthrough (Pakistan mobile):
+    ///   input  phone = "0300 123-4567", phoneCountry = "PK"
+    ///   → compact "03001234567"
+    ///   → parse with region PK
+    ///   → return "+923001234567"
+    /// </summary>
     private static string? NormalizePhone(
         string? phone,
         string? phoneCountry = null)
@@ -343,16 +365,19 @@ public class CandidateService(
             return null;
         }
 
+        // "0300 123-4567" → "03001234567" (spaces, (), ., - removed)
         var compact = Regex.Replace(
             phone.Trim(),
             @"[\s().-]",
             string.Empty);
 
+        // "00923001234567" → "+923001234567"
         if (compact.StartsWith("00"))
         {
             compact = "+" + compact.Substring(2);
         }
 
+        // Reject letters / junk after cleanup
         if (!Regex.IsMatch(compact, @"^\+?[0-9]+$"))
         {
             return null;
@@ -364,6 +389,7 @@ public class CandidateService(
 
         if (!string.IsNullOrWhiteSpace(phoneCountry))
         {
+            // "pk" → "PK"
             region = phoneCountry.Trim().ToUpperInvariant();
 
             if (!phoneUtil.GetSupportedRegions().Contains(region))
@@ -374,17 +400,18 @@ public class CandidateService(
 
         if (compact.StartsWith("+"))
         {
-            // The number already identifies its country.
+            // Already international (e.g. "+923001234567") — country comes from the number.
             region = null;
         }
         else if (region is null)
         {
-            // A local number needs a selected country.
+            // Local "03001234567" with no country cannot be interpreted safely.
             return null;
         }
 
         try
         {
+            // Parse "03001234567" as a PK number → country code 92, national 3001234567
             var parsed = phoneUtil.Parse(compact, region);
 
             if (!phoneUtil.IsValidNumber(parsed))
@@ -392,17 +419,19 @@ public class CandidateService(
                 return null;
             }
 
-            // For local input, also check the selected country's rules.
+            // When the user picked a country, confirm the number is valid for that country.
             if (region is not null
                 && !phoneUtil.IsValidNumberForRegion(parsed, region))
             {
                 return null;
             }
 
+            // Canonical storage form: "+923001234567"
             var normalized = phoneUtil.Format(
                 parsed,
                 PhoneNumberFormat.E164);
 
+            // E.164 allows at most 15 digits after '+'
             var digitCount = normalized.Length - 1;
 
             if (digitCount > 15)
@@ -418,6 +447,15 @@ public class CandidateService(
         }
     }
 
+    /// <summary>
+    /// Builds alternate spellings of one E.164 number so DB rows in older formats still match.
+    /// Starting from normalizedPhone = "+923001234567":
+    ///   "+923001234567"     E.164 (how we store new candidates)
+    ///   "923001234567"      same digits without '+'
+    ///   "00923001234567"    international prefix 00
+    ///   "03001234567"       national digits with trunk 0 (common local typing / legacy rows)
+    ///   "3001234567"        national number only
+    /// </summary>
     private static string[] GetPhoneVariants(string? normalizedPhone)
     {
         if (normalizedPhone is null)
@@ -425,14 +463,47 @@ public class CandidateService(
             return Array.Empty<string>();
         }
 
-        var digits = normalizedPhone.Substring(1);
-
-        return new[]
+        // Seed with the three international-style forms of "+923001234567"
+        var variants = new HashSet<string>(StringComparer.Ordinal)
         {
-        normalizedPhone,
-        digits,
-        "00" + digits
-    };
+            normalizedPhone,                       // "+923001234567"
+            normalizedPhone.Substring(1),          // "923001234567"
+            "00" + normalizedPhone.Substring(1)    // "00923001234567"
+        };
+
+        try
+        {
+            var phoneUtil = PhoneNumberUtil.GetInstance();
+            // Parse the E.164 string back into country + national parts
+            var parsed = phoneUtil.Parse(normalizedPhone, null);
+
+            // NATIONAL format for PK is often "0300 1234567" → digits "03001234567"
+            var nationalDigits = Regex.Replace(
+                phoneUtil.Format(parsed, PhoneNumberFormat.NATIONAL),
+                @"\D",
+                string.Empty);
+
+            // Core national number without trunk prefix: 3001234567
+            var nationalNumber = parsed.NationalNumber.ToString();
+
+            if (nationalDigits.Length > 0)
+            {
+                variants.Add(nationalDigits);      // "03001234567"
+            }
+
+            if (nationalNumber.Length > 0)
+            {
+                variants.Add(nationalNumber);      // "3001234567"
+                // Explicit trunk-0 local form used in many countries including PK
+                variants.Add("0" + nationalNumber); // "03001234567"
+            }
+        }
+        catch (NumberParseException)
+        {
+            // Keep the basic E.164 / 00 variants only.
+        }
+
+        return variants.ToArray();
     }
     private static CandidateDetail ToDetail(Candidate c) =>
         new(
