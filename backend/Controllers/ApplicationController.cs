@@ -141,5 +141,19 @@ namespace RecruitingAts.Api.Controllers
 
             return Ok(stages);
         }
+
+
+        [HttpGet("candidates")]
+        [Authorize(Policy = Permissions.ApplicationsManage)]
+        public async Task<ActionResult<List<CandidateListItem>>> GetScopedCandidates(
+            [FromQuery] string? q,
+            CancellationToken cancellationToken)
+        {
+            var candidates = await applicationService.GetScopedCandidatesAsync(
+                User, q, cancellationToken);
+
+            return Ok(candidates);
+        }
+
     }
 }
