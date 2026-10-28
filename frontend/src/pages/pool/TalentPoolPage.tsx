@@ -291,14 +291,40 @@ export function TalentPoolPage() {
 
     try {
       const response = await api.postForm<CandidateDetail>('/candidates', body)
+      const created = response.data
 
       setOpen(false)
+      setForm(emptyForm)
+      setPhoneCountry('')
+      setConsentDate('')
+      setResumeFile(null)
+      setMatches([])
+      setFormError('')
+      setFormMessage('')
 
       if (canViewPool) {
-        navigate(`/pool/${response.data.candidateId}`)
-      } else {
-        setPageMessage('Candidate created successfully.')
+        navigate(`/pool/${created.candidateId}`)
+        return
       }
+
+      // HM / ApplicationsManage without PoolView: scoped search won't return a
+      // brand-new candidate yet. Open Add to requisition with the create response.
+      if (canManageApplications) {
+        setSelectedCandidate({
+          candidateId: created.candidateId,
+          fullName: created.fullName,
+          email: created.email,
+          phone: created.phone,
+          source: created.source,
+          hasResume: created.hasResume,
+        })
+        setPageMessage(
+          `${created.fullName} created. Choose a published requisition to add them.`,
+        )
+        return
+      }
+
+      setPageMessage('Candidate created successfully.')
     } catch (cause) {
       if (axios.isAxiosError<ApiFailure>(cause)) {
         setMatches(cause.response?.data?.duplicate?.matches ?? [])
