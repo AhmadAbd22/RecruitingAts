@@ -124,5 +124,16 @@ namespace RecruitingAts.Api.Controllers
 
             return Ok(applications);
         }
+
+        [HttpGet("stages")]
+        [Authorize(Policy = Permissions.ApplicationsManage)]
+        public async Task<ActionResult<List<ApplicationPipelineStageDto>>> GetStages(
+            CancellationToken cancellationToken)
+        {
+            var stages = await applicationService.GetPipelineStagesAsync(
+                cancellationToken);
+
+            return Ok(stages);
+        }
     }
 }

@@ -164,6 +164,20 @@ namespace RecruitingAts.Api.Services
                     a.CreatedAt))
                 .ToListAsync(cancellationToken);
         }
+
+        public async Task<List<ApplicationPipelineStageDto>> GetPipelineStagesAsync(
+            CancellationToken cancellationToken = default)
+        {
+            return await db.PipelineStages
+                .AsNoTracking()
+                .Where(stage => stage.IsActive)
+                .OrderBy(stage => stage.SortOrder)
+                .Select(stage => new ApplicationPipelineStageDto(
+                    stage.PipelineStageId,
+                    stage.Name,
+                    stage.SortOrder))
+                .ToListAsync(cancellationToken);
+        }
     }
 
     public record ApplicationPipelineItemDto(
@@ -175,6 +189,10 @@ namespace RecruitingAts.Api.Services
     string StageName,
     string? Source,
     DateTime CreatedAt);
+    public record ApplicationPipelineStageDto(
+        Guid PipelineStageId,
+        string Name,
+        int SortOrder);
     public record UpdateApplicationStageRequest(
         Guid PipelineStageId,
         string? DispositionReason
