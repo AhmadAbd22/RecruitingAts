@@ -12,9 +12,19 @@ import type {
 export const api = axios.create({
   baseURL: '/api',
   withCredentials: true,
-  headers: {
-    'Content-Type': 'application/json',
-  },
+})
+
+/** FormData must keep multipart boundary — never force application/json. */
+api.interceptors.request.use((config) => {
+  if (config.data instanceof FormData) {
+    const headers = config.headers
+    if (headers && typeof headers.delete === 'function') {
+      headers.delete('Content-Type')
+    } else if (headers) {
+      delete (headers as Record<string, unknown>)['Content-Type']
+    }
+  }
+  return config
 })
 
 export type UserDto = {

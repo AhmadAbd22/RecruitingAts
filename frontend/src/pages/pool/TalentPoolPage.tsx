@@ -269,29 +269,40 @@ export function TalentPoolPage() {
       return
     }
 
-    const body = new FormData()
-
-    body.append('FullName', form.fullName.trim())
-    body.append('Email', form.email.trim())
-    body.append('Phone', form.phone.trim())
-    body.append('Skills', form.skills.trim())
-    body.append('Source', form.source.trim())
-    body.append('file', resumeFile)
-
-    if (phoneCountry) {
-      body.append('PhoneCountry', phoneCountry)
-    }
-
-    if (consentDate) {
-      body.append('ConsentDate', consentDate)
-    }
+    // API is two steps: JSON create, then multipart resume (not one FormData POST).
+    const digits = form.phone.trim().replace(/\D/g, '')
+    const callingCode = phoneCountries.find((c) => c.code === phoneCountry)?.callingCode
+    const phoneValue =
+      callingCode && digits
+        ? `+${callingCode}${digits.replace(new RegExp(`^${callingCode}`), '')}`
+        : form.phone.trim()
 
     setBusy(true)
     setMatches([])
 
     try {
-      const response = await api.postForm<CandidateDetail>('/candidates', body)
-      const created = response.data
+      const createResponse = await api.post<CandidateDetail>(
+        '/candidates',
+        {
+          fullName: form.fullName.trim(),
+          email: form.email.trim(),
+          phone: phoneValue,
+          skills: form.skills.trim() || null,
+          source: form.source.trim() || null,
+          consentDate: consentDate || null,
+        },
+        { params: { confirmDuplicate: matches.length > 0 } },
+      )
+
+      let created = createResponse.data
+
+      const resumeBody = new FormData()
+      resumeBody.append('file', resumeFile)
+      const resumeResponse = await api.postForm<CandidateDetail>(
+        `/candidates/${created.candidateId}/resume`,
+        resumeBody,
+      )
+      created = resumeResponse.data
 
       setOpen(false)
       setForm(emptyForm)
