@@ -59,9 +59,16 @@ code,
   display: grid;
   grid-template-columns: var(--nav) 1fr;
   min-height: 100vh;
+  align-items: start;
 }
 
 .app-nav {
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  max-height: 100vh;
+  box-sizing: border-box;
+  overflow: hidden;
   background: var(--ink);
   color: #e8eef5;
   padding: 1.15rem 0.9rem 1.35rem;
@@ -93,6 +100,8 @@ code,
   flex-direction: column;
   gap: 0.2rem;
   flex: 1;
+  min-height: 0;
+  overflow-y: auto;
 }
 
 .nav-item {
@@ -115,6 +124,7 @@ code,
 }
 
 .nav-foot {
+  flex-shrink: 0;
   padding: 0 0.45rem;
   font-size: 0.78rem;
   color: #8a9aab;
@@ -646,6 +656,10 @@ tr.clickable:hover td {
   }
 
   .app-nav {
+    position: static;
+    height: auto;
+    max-height: none;
+    overflow: visible;
     flex-direction: row;
     flex-wrap: wrap;
     align-items: center;

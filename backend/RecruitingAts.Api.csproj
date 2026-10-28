@@ -5,11 +5,9 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <RootNamespace>RecruitingAts.Api</RootNamespace>
-    <UserSecretsId>2166c161-98ed-4951-82c4-9fb63041ef7e</UserSecretsId>
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="libphonenumber-csharp" Version="9.0.41" />
     <PackageReference Include="Microsoft.AspNetCore.Identity.EntityFrameworkCore" Version="9.0.9" />
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="9.0.19" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="9.0.9">
