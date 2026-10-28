@@ -1,9 +1,6 @@
-using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
-using RecruitingAts.Api.Data;
-using RecruitingAts.Api.Data.Entities;
+using RecruitingAts.Api.Services;
 
 namespace RecruitingAts.Api.Controllers
 {
@@ -12,192 +9,65 @@ namespace RecruitingAts.Api.Controllers
     [ApiController]
     public class RequisitionsController : ControllerBase
     {
-        private readonly AppDbContext _context;
+        private readonly IRequisitionService _requisitionService;
 
-        public RequisitionsController(AppDbContext context)
+        public RequisitionsController(IRequisitionService requisitionService)
         {
-            _context = context;
+            _requisitionService = requisitionService;
         }
 
-        private async Task<bool> CanViewBudget(Guid requisitionId, string currentUserId, string currentUserEmail)
-        {
-            var employee = await _context.Employees
-                .FirstOrDefaultAsync(e => e.UserId == currentUserId || e.Email == currentUserEmail);
-
-            if (employee == null) return false;
-
-            var isTeamMember = await _context.RequisitionTeamMembers
-                .AnyAsync(tm => tm.RequisitionId == requisitionId && tm.EmployeeId == employee.EmployeeId);
-
-            return employee.Department == "HR" || isTeamMember;
-        }
-
-        // GET: api/Requisitions
         [HttpGet]
-        [AllowAnonymous]
-        public async Task<ActionResult<IEnumerable<Requisition>>> GetRequisitions()
+        public async Task<IActionResult> GetRequisitions(CancellationToken cancellationToken)
         {
-            var requisitions = await _context.Requisitions
-                .Include(r => r.HiringManager)
-                .Include(r => r.TeamMembers)
-                .ToListAsync();
-
-            // FR-REQ-007: Mask budgets by default on list view
-            foreach (var req in requisitions)
-            {
-                req.BudgetMin = null;
-                req.BudgetMax = null;
-            }
-
-            return requisitions;
+            var list = await _requisitionService.ListAsync(User, cancellationToken);
+            return Ok(list);
         }
 
-        // GET: api/Requisitions/{id}
-        [HttpGet("{id}")]
-        public async Task<ActionResult<Requisition>> GetRequisition(Guid id)
+        [HttpGet("{id:guid}")]
+        public async Task<IActionResult> GetRequisition(Guid id, CancellationToken cancellationToken)
         {
-            var requisition = await _context.Requisitions
-                .Include(r => r.HiringManager)
-                .Include(r => r.TeamMembers)
-                .FirstOrDefaultAsync(r => r.RequisitionId == id);
-
-            if (requisition == null)
+            var detail = await _requisitionService.GetAsync(id, User, cancellationToken);
+            if (detail is null)
             {
-                return NotFound(new { message = "Requisition not found." });
+                return NotFound(new { message = "Requisition not found or not in scope." });
             }
-
-            var currentUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
-            var currentUserEmail = User.FindFirstValue(ClaimTypes.Email);
-
-            // FR-REQ-007: Permission-gated budget confidentiality
-            bool hasBudgetAccess = await CanViewBudget(id, currentUserId, currentUserEmail);
-            if (!hasBudgetAccess)
-            {
-                requisition.BudgetMin = null;
-                requisition.BudgetMax = null;
-            }
-
-            return requisition;
+            return Ok(detail);
         }
 
-        // POST: api/Requisitions (FR-REQ-001: Creation in Draft status, creator becomes Owner, no budget)
         [HttpPost]
-        public async Task<ActionResult<Requisition>> Create([FromBody] Requisition requisition)
+        [Authorize(Policy = "REQUISITIONS.MANAGE")]
+        public async Task<IActionResult> Create([FromBody] CreateRequisitionRequest request, CancellationToken cancellationToken)
         {
-            var currentUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
-            var currentUserEmail = User.FindFirstValue(ClaimTypes.Email);
-
-            if (string.IsNullOrEmpty(currentUserId))
+            var (detail, error) = await _requisitionService.CreateAsync(request, User, cancellationToken);
+            if (error is not null)
             {
-                return Unauthorized(new { message = "User not authenticated." });
+                return BadRequest(new { message = error });
             }
-
-            var employee = await _context.Employees
-                .FirstOrDefaultAsync(e => e.UserId == currentUserId || e.Email == currentUserEmail);
-
-            if (employee == null)
-            {
-                return BadRequest(new { message = "Logged-in user is not linked to any Employee profile." });
-            }
-
-            requisition.RequisitionId = Guid.NewGuid();
-            requisition.CreatedAt = DateTime.UtcNow;
-            requisition.UpdatedAt = DateTime.UtcNow;
-            requisition.Status = "Draft";
-            requisition.BudgetMin = null;
-            requisition.BudgetMax = null;
-
-            if (requisition.TeamMembers == null)
-            {
-                requisition.TeamMembers = new List<RequisitionTeamMember>();
-            }
-
-            // FR-REQ-001 & FR-REQ-004: Creator becomes sole Owner
-            requisition.TeamMembers.Add(new RequisitionTeamMember
-            {
-                RequisitionTeamMemberId = Guid.NewGuid(),
-                RequisitionId = requisition.RequisitionId,
-                EmployeeId = employee.EmployeeId,
-                TeamRole = "Owner",
-                AddedAt = DateTime.UtcNow
-            });
-
-            _context.Requisitions.Add(requisition);
-            await _context.SaveChangesAsync();
-
-            return CreatedAtAction(nameof(GetRequisition), new { id = requisition.RequisitionId }, requisition);
+            return CreatedAtAction(nameof(GetRequisition), new { id = detail!.RequisitionId }, detail);
         }
 
-        // PUT: api/Requisitions/{id} (FR-REQ-008: Edit rules depending on status)
-        [HttpPut("{id}")]
-        public async Task<IActionResult> UpdateRequisition(Guid id, [FromBody] Requisition updatedRequisition)
+        [HttpPost("{id:guid}/submit")]
+        [Authorize(Policy = "REQUISITIONS.MANAGE")]
+        public async Task<IActionResult> SubmitForApproval(Guid id, CancellationToken cancellationToken)
         {
-            var existingRequisition = await _context.Requisitions.FindAsync(id);
-            if (existingRequisition == null)
+            var (detail, error) = await _requisitionService.SubmitForApprovalAsync(id, User, cancellationToken);
+            if (error is not null)
             {
-                return NotFound(new { message = "Requisition not found." });
+                return BadRequest(new { message = error });
             }
-
-            // Cannot update closed or cancelled requisitions
-            if (existingRequisition.Status == "Closed" || existingRequisition.Status == "Cancelled" || existingRequisition.Status == "Filled")
-            {
-                return BadRequest(new { message = $"Requisition cannot be edited in '{existingRequisition.Status}' status." });
-            }
-
-            // FR-REQ-008: Material changes after Publish require re-approval
-            if (existingRequisition.Status == "Published" || existingRequisition.Status == "Approved")
-            {
-                existingRequisition.Status = "PendingApproval";
-                existingRequisition.StatusReason = "Re-approval required due to material modifications after publishing/approval.";
-            }
-
-            existingRequisition.Title = updatedRequisition.Title;
-            existingRequisition.Department = updatedRequisition.Department;
-            existingRequisition.EmploymentType = updatedRequisition.EmploymentType;
-            existingRequisition.Seniority = updatedRequisition.Seniority;
-            existingRequisition.Skills = updatedRequisition.Skills;
-            existingRequisition.JobDescription = updatedRequisition.JobDescription;
-            existingRequisition.Openings = updatedRequisition.Openings;
-            existingRequisition.BudgetMin = updatedRequisition.BudgetMin;
-            existingRequisition.BudgetMax = updatedRequisition.BudgetMax;
-            existingRequisition.UpdatedAt = DateTime.UtcNow;
-
-            await _context.SaveChangesAsync();
-            return Ok(existingRequisition);
+            return Ok(detail);
         }
 
-        // POST: api/Requisitions/{id}/submit (FR-REQ-002)
-        [HttpPost("{id}/submit")]
-        public async Task<IActionResult> SubmitForApproval(Guid id)
+        [HttpPost("{id:guid}/approve")]
+        [Authorize(Policy = "REQUISITIONS.APPROVE")]
+        public async Task<IActionResult> Approve(Guid id, CancellationToken cancellationToken)
         {
-            var requisition = await _context.Requisitions.FindAsync(id);
-            if (requisition == null) return NotFound(new { message = "Requisition not found." });
-
-            if (requisition.Status != "Draft")
-                return BadRequest(new { message = "Only requisitions in 'Draft' status can be submitted for approval." });
-
-            requisition.Status = "PendingApproval";
-            requisition.UpdatedAt = DateTime.UtcNow;
-
-            await _context.SaveChangesAsync();
-            return Ok(requisition);
-        }
-
-        // POST: api/Requisitions/{id}/approve (FR-REQ-002)
-        [HttpPost("{id}/approve")]
-        public async Task<IActionResult> Approve(Guid id)
-        {
-            var requisition = await _context.Requisitions.FindAsync(id);
-            if (requisition == null) return NotFound(new { message = "Requisition not found." });
-
-            if (requisition.Status != "PendingApproval")
-                return BadRequest(new { message = "Only requisitions pending approval can be approved." });
-
-            requisition.Status = "Approved";
-            requisition.UpdatedAt = DateTime.UtcNow;
-
-            await _context.SaveChangesAsync();
-            return Ok(requisition);
+            var (detail, error) = await _requisitionService.ApproveAsync(id, User, cancellationToken);
+            if (error is not null)
+            {
+                return BadRequest(new { message = error });
+            }
+            return Ok(detail);
         }
 
         public class StatusReasonRequest
@@ -205,238 +75,149 @@ namespace RecruitingAts.Api.Controllers
             public string Reason { get; set; } = string.Empty;
         }
 
-        // POST: api/Requisitions/{id}/reject (FR-REQ-002)
-        [HttpPost("{id}/reject")]
-        public async Task<IActionResult> Reject(Guid id, [FromBody] StatusReasonRequest request)
+        [HttpPost("{id:guid}/reject")]
+        [Authorize(Policy = "REQUISITIONS.APPROVE")]
+        public async Task<IActionResult> Reject(Guid id, [FromBody] StatusReasonRequest request, CancellationToken cancellationToken)
         {
             if (string.IsNullOrWhiteSpace(request?.Reason))
+            {
                 return BadRequest(new { message = "A comment/reason is required when rejecting a requisition." });
+            }
 
-            var requisition = await _context.Requisitions.FindAsync(id);
-            if (requisition == null) return NotFound(new { message = "Requisition not found." });
-
-            if (requisition.Status != "PendingApproval")
-                return BadRequest(new { message = "Only requisitions pending approval can be rejected." });
-
-            requisition.Status = "Draft";
-            requisition.StatusReason = request.Reason;
-            requisition.UpdatedAt = DateTime.UtcNow;
-
-            await _context.SaveChangesAsync();
-            return Ok(requisition);
-        }
-
-        // POST: api/Requisitions/{id}/publish (FR-REQ-003: Publish Requisition)
-        [HttpPost("{id}/publish")]
-        public async Task<IActionResult> Publish(Guid id)
-        {
-            var requisition = await _context.Requisitions.FindAsync(id);
-            if (requisition == null) return NotFound(new { message = "Requisition not found." });
-
-            if (requisition.Status != "Approved")
-                return BadRequest(new { message = "Only 'Approved' requisitions can be published." });
-
-            requisition.Status = "Published";
-            requisition.UpdatedAt = DateTime.UtcNow;
-
-            await _context.SaveChangesAsync();
-            return Ok(requisition);
-        }
-
-        // POST: api/Requisitions/{id}/clone (FR-REQ-010: Clone Requisition into new Draft)
-        [HttpPost("{id}/clone")]
-        public async Task<IActionResult> Clone(Guid id)
-        {
-            var sourceRequisition = await _context.Requisitions.FindAsync(id);
-            if (sourceRequisition == null) return NotFound(new { message = "Source requisition not found." });
-
-            var currentUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
-            var currentUserEmail = User.FindFirstValue(ClaimTypes.Email);
-
-            var employee = await _context.Employees
-                .FirstOrDefaultAsync(e => e.UserId == currentUserId || e.Email == currentUserEmail);
-
-            if (employee == null) return BadRequest(new { message = "Logged-in user is not linked to any Employee profile." });
-
-            // Create cloned draft copy (Copy criteria; do NOT copy team or applications)
-            var clonedRequisition = new Requisition
+            var (detail, error) = await _requisitionService.RejectAsync(id, request.Reason, User, cancellationToken);
+            if (error is not null)
             {
-                RequisitionId = Guid.NewGuid(),
-                Title = $"{sourceRequisition.Title} (Clone)",
-                Department = sourceRequisition.Department,
-                EmploymentType = sourceRequisition.EmploymentType,
-                Seniority = sourceRequisition.Seniority,
-                Skills = sourceRequisition.Skills,
-                JobDescription = sourceRequisition.JobDescription,
-                Openings = sourceRequisition.Openings,
-                HiringManagerEmployeeId = sourceRequisition.HiringManagerEmployeeId,
-                Status = "Draft",
-                BudgetMin = null,
-                BudgetMax = null,
-                CreatedAt = DateTime.UtcNow,
-                UpdatedAt = DateTime.UtcNow,
-                TeamMembers = new List<RequisitionTeamMember>()
-            };
-
-            // Assign current user as single Owner of cloned draft
-            clonedRequisition.TeamMembers.Add(new RequisitionTeamMember
-            {
-                RequisitionTeamMemberId = Guid.NewGuid(),
-                RequisitionId = clonedRequisition.RequisitionId,
-                EmployeeId = employee.EmployeeId,
-                TeamRole = "Owner",
-                AddedAt = DateTime.UtcNow
-            });
-
-            _context.Requisitions.Add(clonedRequisition);
-            await _context.SaveChangesAsync();
-
-            return CreatedAtAction(nameof(GetRequisition), new { id = clonedRequisition.RequisitionId }, clonedRequisition);
+                return BadRequest(new { message = error });
+            }
+            return Ok(detail);
         }
 
-        // POST: api/Requisitions/{id}/hold (FR-REQ-009)
-        [HttpPost("{id}/hold")]
-        public async Task<IActionResult> Hold(Guid id, [FromBody] StatusReasonRequest request)
+        [HttpPost("{id:guid}/publish")]
+        [Authorize(Policy = "REQUISITIONS.MANAGE")]
+        public async Task<IActionResult> Publish(Guid id, CancellationToken cancellationToken)
+        {
+            var (detail, error) = await _requisitionService.PublishAsync(id, User, cancellationToken);
+            if (error is not null)
+            {
+                return BadRequest(new { message = error });
+            }
+            return Ok(detail);
+        }
+
+        [HttpPost("{id:guid}/hold")]
+        [Authorize(Policy = "REQUISITIONS.MANAGE")]
+        public async Task<IActionResult> Hold(Guid id, [FromBody] StatusReasonRequest request, CancellationToken cancellationToken)
         {
             if (string.IsNullOrWhiteSpace(request?.Reason))
+            {
                 return BadRequest(new { message = "A reason is required when putting a requisition on hold." });
+            }
 
-            var requisition = await _context.Requisitions.FindAsync(id);
-            if (requisition == null) return NotFound(new { message = "Requisition not found." });
-
-            requisition.Status = "OnHold";
-            requisition.StatusReason = request.Reason;
-            requisition.UpdatedAt = DateTime.UtcNow;
-
-            await _context.SaveChangesAsync();
-            return Ok(requisition);
+            var (detail, error) = await _requisitionService.ChangeStatusAsync(id, "OnHold", request.Reason, User, cancellationToken);
+            if (error is not null)
+            {
+                return BadRequest(new { message = error });
+            }
+            return Ok(detail);
         }
 
-        // POST: api/Requisitions/{id}/close (FR-REQ-009)
-        [HttpPost("{id}/close")]
-        public async Task<IActionResult> Close(Guid id, [FromBody] StatusReasonRequest request)
+        [HttpPost("{id:guid}/close")]
+        [Authorize(Policy = "REQUISITIONS.MANAGE")]
+        public async Task<IActionResult> Close(Guid id, [FromBody] StatusReasonRequest request, CancellationToken cancellationToken)
         {
             if (string.IsNullOrWhiteSpace(request?.Reason))
+            {
                 return BadRequest(new { message = "A reason is required when closing a requisition." });
+            }
 
-            var requisition = await _context.Requisitions.FindAsync(id);
-            if (requisition == null) return NotFound(new { message = "Requisition not found." });
-
-            requisition.Status = "Closed";
-            requisition.StatusReason = request.Reason;
-            requisition.UpdatedAt = DateTime.UtcNow;
-
-            await _context.SaveChangesAsync();
-            return Ok(requisition);
+            var (detail, error) = await _requisitionService.ChangeStatusAsync(id, "Closed", request.Reason, User, cancellationToken);
+            if (error is not null)
+            {
+                return BadRequest(new { message = error });
+            }
+            return Ok(detail);
         }
 
-        // POST: api/Requisitions/{id}/cancel (FR-REQ-009)
-        [HttpPost("{id}/cancel")]
-        public async Task<IActionResult> Cancel(Guid id, [FromBody] StatusReasonRequest request)
+        [HttpPost("{id:guid}/cancel")]
+        [Authorize(Policy = "REQUISITIONS.MANAGE")]
+        public async Task<IActionResult> Cancel(Guid id, [FromBody] StatusReasonRequest request, CancellationToken cancellationToken)
         {
             if (string.IsNullOrWhiteSpace(request?.Reason))
+            {
                 return BadRequest(new { message = "A reason is required when cancelling a requisition." });
+            }
 
-            var requisition = await _context.Requisitions.FindAsync(id);
-            if (requisition == null) return NotFound(new { message = "Requisition not found." });
-
-            requisition.Status = "Cancelled";
-            requisition.StatusReason = request.Reason;
-            requisition.UpdatedAt = DateTime.UtcNow;
-
-            await _context.SaveChangesAsync();
-            return Ok(requisition);
+            var (detail, error) = await _requisitionService.ChangeStatusAsync(id, "Cancelled", request.Reason, User, cancellationToken);
+            if (error is not null)
+            {
+                return BadRequest(new { message = error });
+            }
+            return Ok(detail);
         }
 
-        // POST: api/Requisitions/{id}/fill (FR-REQ-009)
-        [HttpPost("{id}/fill")]
-        public async Task<IActionResult> Fill(Guid id, [FromBody] StatusReasonRequest request)
+        [HttpPost("{id:guid}/fill")]
+        [Authorize(Policy = "REQUISITIONS.MANAGE")]
+        public async Task<IActionResult> Fill(Guid id, [FromBody] StatusReasonRequest request, CancellationToken cancellationToken)
         {
-            var requisition = await _context.Requisitions.FindAsync(id);
-            if (requisition == null) return NotFound(new { message = "Requisition not found." });
-
-            requisition.Status = "Filled";
-            requisition.StatusReason = request?.Reason ?? "Position successfully filled.";
-            requisition.UpdatedAt = DateTime.UtcNow;
-
-            await _context.SaveChangesAsync();
-            return Ok(requisition);
+            var reason = string.IsNullOrWhiteSpace(request?.Reason) ? "Position successfully filled." : request.Reason;
+            var (detail, error) = await _requisitionService.ChangeStatusAsync(id, "Filled", reason, User, cancellationToken);
+            if (error is not null)
+            {
+                return BadRequest(new { message = error });
+            }
+            return Ok(detail);
         }
 
-        // FR-REQ-004: Add Team Member (Enforces exactly 1 Owner)
+        public class UpdateBudgetRequest
+        {
+            public decimal? BudgetMin { get; set; }
+            public decimal? BudgetMax { get; set; }
+        }
+
+        [HttpPut("{id:guid}/budget")]
+        [Authorize(Policy = "ATS.COMPENSATION.EDIT")]
+        public async Task<IActionResult> UpdateBudget(Guid id, [FromBody] UpdateBudgetRequest request, CancellationToken cancellationToken)
+        {
+            var (detail, error) = await _requisitionService.UpdateBudgetAsync(id, request?.BudgetMin, request?.BudgetMax, User, cancellationToken);
+            if (error is not null)
+            {
+                return BadRequest(new { message = error });
+            }
+            return Ok(detail);
+        }
+
         public class AddTeamMemberRequest
         {
             public Guid EmployeeId { get; set; }
-            public string TeamRole { get; set; } = string.Empty; // "Owner", "Recruiter", "Interviewer"
+            public string TeamRole { get; set; } = string.Empty;
         }
 
-        [HttpPost("{id}/team-members")]
-        public async Task<IActionResult> AddTeamMember(Guid id, [FromBody] AddTeamMemberRequest request)
+        [HttpPost("{id:guid}/team-members")]
+        [Authorize(Policy = "REQUISITIONS.MANAGE")]
+        public async Task<IActionResult> AddTeamMember(Guid id, [FromBody] AddTeamMemberRequest request, CancellationToken cancellationToken)
         {
             if (request == null || string.IsNullOrWhiteSpace(request.TeamRole))
-                return BadRequest(new { message = "Valid EmployeeId and TeamRole are required." });
-
-            var requisition = await _context.Requisitions
-                .Include(r => r.TeamMembers)
-                .FirstOrDefaultAsync(r => r.RequisitionId == id);
-
-            if (requisition == null) return NotFound(new { message = "Requisition not found." });
-
-            // FR-REQ-004 Rule: Exactly one Owner allowed per requisition
-            if (request.TeamRole.Equals("Owner", StringComparison.OrdinalIgnoreCase))
             {
-                var existingOwner = requisition.TeamMembers.FirstOrDefault(tm => tm.TeamRole.Equals("Owner", StringComparison.OrdinalIgnoreCase));
-                if (existingOwner != null && existingOwner.EmployeeId != request.EmployeeId)
-                {
-                    return BadRequest(new { message = "A requisition can only have exactly one Owner. Transfer ownership or choose another role." });
-                }
+                return BadRequest(new { message = "Valid EmployeeId and TeamRole are required." });
             }
 
-            var employeeExists = await _context.Employees.AnyAsync(e => e.EmployeeId == request.EmployeeId);
-            if (!employeeExists) return BadRequest(new { message = "Employee not found." });
-
-            var existingMember = requisition.TeamMembers
-                .FirstOrDefault(tm => tm.EmployeeId == request.EmployeeId && tm.TeamRole == request.TeamRole);
-
-            if (existingMember != null)
-                return BadRequest(new { message = "This employee is already assigned to this requisition with the specified role." });
-
-            var newTeamMember = new RequisitionTeamMember
+            var (detail, error) = await _requisitionService.AddTeamMemberAsync(id, request.EmployeeId, request.TeamRole, User, cancellationToken);
+            if (error is not null)
             {
-                RequisitionTeamMemberId = Guid.NewGuid(),
-                RequisitionId = id,
-                EmployeeId = request.EmployeeId,
-                TeamRole = request.TeamRole,
-                AddedAt = DateTime.UtcNow
-            };
-
-            _context.RequisitionTeamMembers.Add(newTeamMember);
-            requisition.TeamMembers.Add(newTeamMember);
-            requisition.UpdatedAt = DateTime.UtcNow;
-
-            await _context.SaveChangesAsync();
-            return Ok(newTeamMember);
+                return BadRequest(new { message = error });
+            }
+            return Ok(detail);
         }
 
-        // FR-REQ-004: Remove Team Member
-        [HttpDelete("{id}/team-members/{teamMemberId}")]
-        public async Task<IActionResult> RemoveTeamMember(Guid id, Guid teamMemberId)
+        [HttpDelete("{id:guid}/team-members/{teamMemberId:guid}")]
+        [Authorize(Policy = "REQUISITIONS.MANAGE")]
+        public async Task<IActionResult> RemoveTeamMember(Guid id, Guid teamMemberId, CancellationToken cancellationToken)
         {
-            var requisition = await _context.Requisitions
-                .Include(r => r.TeamMembers)
-                .FirstOrDefaultAsync(r => r.RequisitionId == id);
-
-            if (requisition == null) return NotFound(new { message = "Requisition not found." });
-
-            var teamMember = requisition.TeamMembers
-                .FirstOrDefault(tm => tm.RequisitionTeamMemberId == teamMemberId);
-
-            if (teamMember == null) return NotFound(new { message = "Team member assignment not found." });
-
-            _context.RequisitionTeamMembers.Remove(teamMember);
-            requisition.UpdatedAt = DateTime.UtcNow;
-
-            await _context.SaveChangesAsync();
+            var (ok, error) = await _requisitionService.RemoveTeamMemberAsync(id, teamMemberId, User, cancellationToken);
+            if (!ok)
+            {
+                return BadRequest(new { message = error });
+            }
             return Ok(new { message = "Team member removed successfully." });
         }
     }

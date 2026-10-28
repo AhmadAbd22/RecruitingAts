@@ -10,7 +10,7 @@ namespace RecruitingAts.Api.Services;
 public class RequisitionService(
     AppDbContext db,
     IRequisitionScopeService scope,
-    IAuditService audit)
+    IAuditService audit) : IRequisitionService
 {
     public async Task<IReadOnlyList<RequisitionListItem>> ListAsync(
         ClaimsPrincipal user,
