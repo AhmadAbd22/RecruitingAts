@@ -76,7 +76,7 @@ public class CandidatesController(CandidateService candidates) : ControllerBase
     [RequestSizeLimit(LocalFileStorage.MaxResumeBytes + 64 * 1024)]
     public async Task<ActionResult> Create(
         [FromForm] CreateCandidateRequest request,
-        [FromForm] IFormFile? file,
+        IFormFile? file,
         CancellationToken cancellationToken = default)
     {
         if (file is null || file.Length == 0)
@@ -134,7 +134,7 @@ public class CandidatesController(CandidateService candidates) : ControllerBase
     [RequestSizeLimit(LocalFileStorage.MaxResumeBytes + 64 * 1024)]
     public async Task<ActionResult<CandidateDetail>> UploadResume(
         Guid id,
-        [FromForm] IFormFile? file,
+        IFormFile? file,
         CancellationToken cancellationToken)
     {
         if (file is null || file.Length == 0)
