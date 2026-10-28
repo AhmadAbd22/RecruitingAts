@@ -10,6 +10,33 @@ import type {
 import { Button, EmptyState, PageHeader } from '../../components/shared'
 import { StageColumn, StageMoveDrawer } from '../../components/pipeline'
 
+const terminalStageNames = new Set(['Hired', 'Disqualified', 'NFA'])
+
+type StageUpdateApiError = {
+  message?: string
+  detail?: string
+  title?: string
+  errors?: Record<string, string[]>
+}
+
+function getStageUpdateErrorMessage(cause: unknown) {
+  if (axios.isAxiosError<StageUpdateApiError | string>(cause)) {
+    const body = cause.response?.data
+    if (typeof body === 'string' && body.trim()) return body
+
+    if (body && typeof body === 'object') {
+      const validationMessage = Object.values(body.errors ?? {}).flat().find(Boolean)
+      const message = body.message ?? body.detail ?? validationMessage ?? body.title
+      if (message) return message
+    }
+
+    return cause.message || 'Unable to update the application stage.'
+  }
+
+  if (cause instanceof Error) return cause.message
+  return 'An unexpected error occurred while updating the application stage.'
+}
+
 /** Owner: Abdul-Manan */
 export function PipelineBoardPage() {
   const [applications, setApplications] = useState<ApplicationPipelineItemDto[]>([])
@@ -116,6 +143,8 @@ export function PipelineBoardPage() {
   const selectedApplication = applications.find(
     (application) => application.applicationId === selectedId,
   )
+  const currentStageIsTerminal =
+    !!selectedApplication && terminalStageNames.has(selectedApplication.stageName)
   const selectedStage = pipelineStages.find((stage) => stage.pipelineStageId === stageId)
   const needsDisposition =
     selectedStage?.name === 'Disqualified' || selectedStage?.name === 'NFA'
@@ -137,6 +166,7 @@ export function PipelineBoardPage() {
       stagesLoading ||
       stagesError ||
       pipelineStages.length === 0 ||
+      currentStageIsTerminal ||
       stageUpdateLock.current
     ) return
 
@@ -160,15 +190,7 @@ export function PipelineBoardPage() {
       setSelectedId(null)
       setLoadAttempt((attempt) => attempt + 1)
     } catch (cause) {
-      if (axios.isAxiosError<{ message?: string }>(cause)) {
-        setStageUpdateError(
-          cause.response?.data?.message ?? cause.message ?? 'Unable to update the application stage.',
-        )
-      } else if (cause instanceof Error) {
-        setStageUpdateError(cause.message)
-      } else {
-        setStageUpdateError('An unexpected error occurred while updating the application stage.')
-      }
+      setStageUpdateError(getStageUpdateErrorMessage(cause))
     } finally {
       stageUpdateLock.current = false
       setStageUpdatePending(false)
@@ -231,6 +253,7 @@ export function PipelineBoardPage() {
         applicationId={selectedId}
         candidateName="Update application stage"
         currentStageId={selectedApplication?.pipelineStageId}
+        currentStageIsTerminal={currentStageIsTerminal}
         stages={pipelineStages}
         stagesLoading={stagesLoading}
         stagesError={stagesError}

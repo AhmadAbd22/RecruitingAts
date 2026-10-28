@@ -10,6 +10,7 @@ export type StageMoveDrawerProps = {
   applicationId?: string | null
   candidateName?: string
   currentStageId?: string
+  currentStageIsTerminal?: boolean
   stages: StageMoveOption[]
   dispositionReason: string
   onDispositionReasonChange: (value: string) => void
@@ -31,6 +32,7 @@ export function StageMoveDrawer({
   open,
   applicationId,
   candidateName = 'Candidate',
+  currentStageIsTerminal = false,
   stages,
   dispositionReason,
   onDispositionReasonChange,
@@ -58,7 +60,7 @@ export function StageMoveDrawer({
           <Button
             variant="primary"
             onClick={onConfirm}
-            disabled={isSubmitting || !canSubmitStage}
+            disabled={isSubmitting || !canSubmitStage || currentStageIsTerminal}
           >
             {isSubmitting
               ? 'Updating…'
@@ -84,6 +86,11 @@ export function StageMoveDrawer({
         <div className="empty-state" role="status">
           <strong>No active stages</strong>
           <p>There are no active pipeline stages available to select.</p>
+        </div>
+      ) : currentStageIsTerminal ? (
+        <div className="empty-state" role="status">
+          <strong>Stage changes unavailable</strong>
+          <p>Applications in Hired, Disqualified, or NFA cannot be moved using this action.</p>
         </div>
       ) : (
         <>

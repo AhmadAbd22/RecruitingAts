@@ -22,6 +22,7 @@ export function TalentPoolPage() {
   const [candidates, setCandidates] = useState<CandidateListItem[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [searchForbidden, setSearchForbidden] = useState(false)
   const [retryAttempt, setRetryAttempt] = useState(0)
   const [open, setOpen] = useState(false)
   const [selectedCandidate, setSelectedCandidate] = useState<CandidateListItem | null>(null)
@@ -48,19 +49,20 @@ export function TalentPoolPage() {
     const timer = window.setTimeout(async () => {
       setLoading(true)
       setError(null)
+      setSearchForbidden(false)
 
       try {
         const results = await searchCandidates(q.trim())
         if (!cancelled) setCandidates(results)
       } catch (cause) {
         if (cancelled) return
-        if (axios.isAxiosError<{ message?: string }>(cause)) {
-          setError(cause.response?.data?.message ?? cause.message)
-        } else if (cause instanceof Error) {
-          setError(cause.message)
-        } else {
-          setError('An unexpected error occurred while loading candidates.')
-        }
+        const forbidden = axios.isAxiosError(cause) && cause.response?.status === 403
+        setSearchForbidden(forbidden)
+        setError(
+          forbidden
+            ? "You don't have permission to access the talent pool. Please contact your administrator if you believe you should have access."
+            : 'We couldn’t load candidates. Please try again.',
+        )
       } finally {
         if (!cancelled) setLoading(false)
       }
@@ -159,7 +161,7 @@ export function TalentPoolPage() {
     <div className="page">
       <PageHeader
         title="Talent pool"
-        subtitle="GET /api/candidates?q="
+        subtitle="Search and browse candidate profiles."
         actions={
           canManage ? (
             <Button variant="primary" onClick={() => setOpen(true)}>
@@ -181,9 +183,11 @@ export function TalentPoolPage() {
       ) : error ? (
         <div className="panel">
           <p className="error" role="alert">{error}</p>
-          <Button variant="primary" onClick={() => setRetryAttempt((attempt) => attempt + 1)}>
-            Retry
-          </Button>
+          {!searchForbidden ? (
+            <Button variant="primary" onClick={() => setRetryAttempt((attempt) => attempt + 1)}>
+              Retry
+            </Button>
+          ) : null}
         </div>
       ) : candidates.length === 0 ? (
         <EmptyState
