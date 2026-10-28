@@ -61,6 +61,7 @@ export type PipelineApplication = {
 export type ApplicationPipelineItemDto = {
   applicationId: string
   candidateId: string
+  candidateName: string
   requisitionId: string
   requisitionTitle: string
   pipelineStageId: string

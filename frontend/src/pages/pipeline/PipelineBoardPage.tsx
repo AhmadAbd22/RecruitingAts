@@ -116,21 +116,13 @@ export function PipelineBoardPage() {
     }
   }, [stagesLoadAttempt])
 
-  const stages = new Map<string, { stageId: string; stageName: string; applications: PipelineApplication[] }>()
+  const applicationsByStage = new Map<string, PipelineApplication[]>()
   for (const application of applications) {
-    const key = JSON.stringify([application.pipelineStageId, application.stageName])
-    let stage = stages.get(key)
-    if (!stage) {
-      stage = {
-        stageId: application.pipelineStageId,
-        stageName: application.stageName,
-        applications: [],
-      }
-      stages.set(key, stage)
-    }
-    stage.applications.push({
+    const stageApplications = applicationsByStage.get(application.pipelineStageId) ?? []
+    stageApplications.push({
       applicationId: application.applicationId,
       candidateId: application.candidateId,
+      candidateName: application.candidateName,
       requisitionId: application.requisitionId,
       requisitionTitle: application.requisitionTitle,
       pipelineStageId: application.pipelineStageId,
@@ -138,6 +130,7 @@ export function PipelineBoardPage() {
       source: application.source,
       createdAt: application.createdAt,
     })
+    applicationsByStage.set(application.pipelineStageId, stageApplications)
   }
 
   const selectedApplication = applications.find(
@@ -232,16 +225,15 @@ export function PipelineBoardPage() {
             Retry
           </Button>
         </div>
-      ) : applications.length === 0 ? (
-        <EmptyState title="No applications" message="There are no applications in your accessible pipeline." />
       ) : (
         <div className="board-row">
-          {[...stages.values()].map((stage) => (
+          {pipelineStages.map((stage) => (
             <StageColumn
-              key={stage.stageId + stage.stageName}
-              stageId={stage.stageId}
-              stageName={stage.stageName}
-              applications={stage.applications}
+              key={stage.pipelineStageId}
+              stageId={stage.pipelineStageId}
+              stageName={stage.name}
+              stageColor={stage.color}
+              applications={applicationsByStage.get(stage.pipelineStageId) ?? []}
               selectedApplicationId={selectedId}
               onSelectApplication={selectApplication}
             />
@@ -251,7 +243,7 @@ export function PipelineBoardPage() {
       <StageMoveDrawer
         open={!!selectedApplication}
         applicationId={selectedId}
-        candidateName="Update application stage"
+        candidateName={selectedApplication?.candidateName ?? 'Update application stage'}
         currentStageId={selectedApplication?.pipelineStageId}
         currentStageIsTerminal={currentStageIsTerminal}
         stages={pipelineStages}
