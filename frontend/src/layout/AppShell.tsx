@@ -26,7 +26,10 @@ export function AppShell() {
     {
       to: '/pool',
       label: 'Talent pool',
-      show: can(Permissions.PoolView) || can(Permissions.CandidatesManage),
+      show:
+        can(Permissions.PoolView) ||
+        can(Permissions.CandidatesManage) ||
+        can(Permissions.ApplicationsManage),
     },
     {
       to: '/pipeline',

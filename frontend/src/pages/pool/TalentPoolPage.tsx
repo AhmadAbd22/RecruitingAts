@@ -5,6 +5,7 @@ import {
   createApplication,
   getRequisitions,
   Permissions,
+  searchApplicationCandidates,
   searchCandidates,
 } from '../../api/client'
 import { usePermission } from '../../auth/usePermission'
@@ -17,7 +18,10 @@ import type { CandidateListItem, RequisitionListItem } from '../../types/domain'
 export function TalentPoolPage() {
   const navigate = useNavigate()
   const canManage = usePermission(Permissions.CandidatesManage)
+  const canViewPool = usePermission(Permissions.PoolView)
   const canManageApplications = usePermission(Permissions.ApplicationsManage)
+  const canSearchCandidates = canViewPool || canManageApplications
+  const usesScopedCandidateSearch = !canViewPool && canManageApplications
   const [q, setQ] = useState('')
   const [candidates, setCandidates] = useState<CandidateListItem[]>([])
   const [loading, setLoading] = useState(true)
@@ -46,22 +50,37 @@ export function TalentPoolPage() {
 
   useEffect(() => {
     let cancelled = false
+
+    if (!canSearchCandidates) {
+      setCandidates([])
+      setLoading(false)
+      setError("You don't have permission to access candidates.")
+      setSearchForbidden(true)
+      return
+    }
+
     const timer = window.setTimeout(async () => {
       setLoading(true)
       setError(null)
       setSearchForbidden(false)
 
       try {
-        const results = await searchCandidates(q.trim())
+        const results = canViewPool
+          ? await searchCandidates(q.trim())
+          : await searchApplicationCandidates(q.trim())
         if (!cancelled) setCandidates(results)
       } catch (cause) {
         if (cancelled) return
         const forbidden = axios.isAxiosError(cause) && cause.response?.status === 403
         setSearchForbidden(forbidden)
         setError(
-          forbidden
-            ? "You don't have permission to access the talent pool. Please contact your administrator if you believe you should have access."
-            : 'We couldn’t load candidates. Please try again.',
+          usesScopedCandidateSearch
+            ? forbidden
+              ? "You don't have permission to search candidates for applications. Please contact your administrator if you believe you should have access."
+              : 'We couldn’t load candidates for your accessible requisitions. Please try again.'
+            : forbidden
+              ? "You don't have permission to access the talent pool. Please contact your administrator if you believe you should have access."
+              : 'We couldn’t load candidates. Please try again.',
         )
       } finally {
         if (!cancelled) setLoading(false)
@@ -72,7 +91,7 @@ export function TalentPoolPage() {
       cancelled = true
       window.clearTimeout(timer)
     }
-  }, [q, retryAttempt])
+  }, [canSearchCandidates, canViewPool, q, retryAttempt, usesScopedCandidateSearch])
 
   useEffect(() => {
     if (!selectedCandidate) return
@@ -161,7 +180,11 @@ export function TalentPoolPage() {
     <div className="page">
       <PageHeader
         title="Talent pool"
-        subtitle="Search and browse candidate profiles."
+        subtitle={
+          usesScopedCandidateSearch
+            ? 'Search candidates linked to requisitions you can access.'
+            : 'Search and browse candidate profiles.'
+        }
         actions={
           canManage ? (
             <Button variant="primary" onClick={() => setOpen(true)}>
@@ -191,17 +214,25 @@ export function TalentPoolPage() {
         </div>
       ) : candidates.length === 0 ? (
         <EmptyState
-          title={q.trim() ? 'No matching candidates' : 'No candidates yet'}
+          title={
+            q.trim()
+              ? 'No matching candidates'
+              : usesScopedCandidateSearch
+                ? 'No candidates in your requisition scope'
+                : 'No candidates yet'
+          }
           message={
             q.trim()
               ? 'Try a different name, email, or phone number.'
-              : 'No candidates are currently available in the talent pool.'
+              : usesScopedCandidateSearch
+                ? 'No candidates linked to requisitions you can access were found.'
+                : 'No candidates are currently available in the talent pool.'
           }
         />
       ) : (
         <CandidateList
           items={candidates}
-          onSelect={(id) => navigate(`/pool/${id}`)}
+          onSelect={canViewPool ? (id) => navigate(`/pool/${id}`) : undefined}
           onAddToRequisition={
             canManageApplications
               ? (candidate) => {

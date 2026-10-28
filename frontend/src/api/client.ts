@@ -79,6 +79,13 @@ export async function searchCandidates(query: string) {
   return data
 }
 
+export async function searchApplicationCandidates(query: string) {
+  const { data } = await api.get<CandidateListItem[]>('/applications/candidates', {
+    params: { q: query },
+  })
+  return data
+}
+
 export async function getRequisitions() {
   const { data } = await api.get<RequisitionListItem[]>('/requisitions')
   return data
