@@ -178,6 +178,7 @@ namespace RecruitingAts.Api.Services
                 .Select(a => new ApplicationPipelineItemDto(
                     a.ApplicationId,
                     a.CandidateId,
+                    a.Candidate.FullName,
                     a.RequisitionId,
                     a.Requisition.Title,
                     a.PipelineStageId,
@@ -186,6 +187,52 @@ namespace RecruitingAts.Api.Services
                     a.CreatedAt))
                 .ToListAsync(cancellationToken);
         }
+
+
+
+        public async Task<List<CandidateListItem>> GetScopedCandidatesAsync(
+            ClaimsPrincipal user,
+            string? query,
+            CancellationToken cancellationToken = default)
+        {
+            var employeeId = await requisitionScope.GetEmployeeIdAsync(
+                user, cancellationToken);
+
+            var scopedRequisitions = requisitionScope.Scope(
+                db.Requisitions.AsNoTracking(),
+                user,
+                employeeId);
+
+            var candidates = db.Applications
+                .AsNoTracking()
+                .Where(a => scopedRequisitions.Any(
+                    r => r.RequisitionId == a.RequisitionId))
+                .Select(a => a.Candidate)
+                .Distinct();
+
+            if (!string.IsNullOrWhiteSpace(query))
+            {
+                var term = query.Trim().ToLowerInvariant();
+
+                candidates = candidates.Where(c =>
+                    c.FullName.ToLower().Contains(term) ||
+                    c.Email.ToLower().Contains(term) ||
+                    c.Phone.Contains(term));
+            }
+
+            return await candidates
+                .OrderBy(c => c.FullName)
+                .Take(100)
+                .Select(c => new CandidateListItem(
+                    c.CandidateId,
+                    c.FullName,
+                    c.Email,
+                    c.Phone,
+                    c.Source,
+                    c.ResumePath != null))
+                .ToListAsync(cancellationToken);
+        }
+
 
         public async Task<List<ApplicationPipelineStageDto>> GetPipelineStagesAsync(
             CancellationToken cancellationToken = default)
@@ -205,6 +252,7 @@ namespace RecruitingAts.Api.Services
     public record ApplicationPipelineItemDto(
     Guid ApplicationId,
     Guid CandidateId,
+    string CandidateName,
     Guid RequisitionId,
     string RequisitionTitle,
     Guid PipelineStageId,
