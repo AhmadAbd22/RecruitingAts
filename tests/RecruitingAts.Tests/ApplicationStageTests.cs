@@ -74,6 +74,47 @@ public class ApplicationStageTests
         Assert.Equal("Not a fit for the role", app.DispositionReason);
     }
 
+    [Fact]
+    public async Task StageMove_OutOfScope_ReturnsForbidden()
+    {
+        var (db, service, _, appId, stages) = await CreateFixtureAsync();
+
+        var outsider = new ClaimsPrincipal(new ClaimsIdentity(
+        [
+            new Claim(ClaimTypes.NameIdentifier, "outsider-user")
+        ], "Test"));
+
+        var result = await service.UpdateStageAsync(
+            appId,
+            new UpdateApplicationStageRequest(stages.ScreeningId, DispositionReason: null),
+            outsider);
+
+        Assert.Equal(ApplicationStageUpdateStatus.Forbidden, result.Status);
+        var app = await db.Applications.SingleAsync(a => a.ApplicationId == appId);
+        Assert.Equal(stages.AppliedId, app.PipelineStageId);
+    }
+
+    [Fact]
+    public async Task StageMove_FromTerminal_ReturnsTerminalStageCannotBeChanged()
+    {
+        var (db, service, user, appId, stages) = await CreateFixtureAsync();
+
+        var toTerminal = await service.UpdateStageAsync(
+            appId,
+            new UpdateApplicationStageRequest(stages.DisqualifiedId, "Closed out"),
+            user);
+        Assert.Equal(ApplicationStageUpdateStatus.Success, toTerminal.Status);
+
+        var result = await service.UpdateStageAsync(
+            appId,
+            new UpdateApplicationStageRequest(stages.ScreeningId, DispositionReason: null),
+            user);
+
+        Assert.Equal(ApplicationStageUpdateStatus.TerminalStageCannotBeChanged, result.Status);
+        var app = await db.Applications.SingleAsync(a => a.ApplicationId == appId);
+        Assert.Equal(stages.DisqualifiedId, app.PipelineStageId);
+    }
+
     private static async Task<(
         AppDbContext Db,
         ApplicationService Service,
