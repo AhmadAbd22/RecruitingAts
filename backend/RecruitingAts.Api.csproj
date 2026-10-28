@@ -5,15 +5,7 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <RootNamespace>RecruitingAts.Api</RootNamespace>
-<<<<<<< HEAD
-<<<<<<< HEAD
-    <UserSecretsId>6272f683-b384-42c9-860a-b698977f5f9c</UserSecretsId>
-=======
     <UserSecretsId>2166c161-98ed-4951-82c4-9fb63041ef7e</UserSecretsId>
->>>>>>> b7e07ab0a2e551e78e461f20ed0f794b7c0c1861
-=======
-    <UserSecretsId>2166c161-98ed-4951-82c4-9fb63041ef7e</UserSecretsId>
->>>>>>> 76a25c2b1da70c6d8436d52cc23eb22cdeb6cd14
   </PropertyGroup>
 
   <ItemGroup>
