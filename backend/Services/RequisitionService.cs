@@ -173,16 +173,15 @@ public class RequisitionService(
             return (null, "Missing REQUISITIONS.APPROVE permission.");
         }
 
-        // 1. Perform Scope / Access Check BEFORE fetching or mutating entity state
-        if (!await scope.CanAccessAsync(id, user, cancellationToken))
-        {
-            return (null, "Requisition not found or not in scope.");
-        }
-
         var req = await db.Requisitions.FirstOrDefaultAsync(r => r.RequisitionId == id, cancellationToken);
         if (req is null)
         {
             return (null, "Requisition not found.");
+        }
+
+        if (!await scope.CanAccessAsync(id, user, cancellationToken))
+        {
+            return (null, "Requisition not found or not in scope.");
         }
 
         if (req.Status != RequisitionStatuses.PendingApproval)
@@ -240,16 +239,15 @@ public class RequisitionService(
             return (null, "Rejection reason is required.");
         }
 
-        // 1. Perform Scope / Access Check BEFORE fetching or mutating entity state
-        if (!await scope.CanAccessAsync(id, user, cancellationToken))
-        {
-            return (null, "Requisition not found or not in scope.");
-        }
-
         var req = await db.Requisitions.FirstOrDefaultAsync(r => r.RequisitionId == id, cancellationToken);
         if (req is null)
         {
             return (null, "Requisition not found.");
+        }
+
+        if (!await scope.CanAccessAsync(id, user, cancellationToken))
+        {
+            return (null, "Requisition not found or not in scope.");
         }
 
         if (req.Status != RequisitionStatuses.PendingApproval)
