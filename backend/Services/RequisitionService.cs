@@ -154,7 +154,6 @@ public class RequisitionService(
             return (null, "Only Draft requisitions can be submitted for approval.");
         }
 
-        // Published is not editable — also block editing Pending/Published content elsewhere.
         req.Status = RequisitionStatuses.PendingApproval;
         req.StatusReason = null;
         req.UpdatedAt = DateTime.UtcNow;
@@ -172,6 +171,12 @@ public class RequisitionService(
         if (!user.HasClaim(Permissions.ClaimType, Permissions.RequisitionsApprove))
         {
             return (null, "Missing REQUISITIONS.APPROVE permission.");
+        }
+
+        // 1. Perform Scope / Access Check BEFORE fetching or mutating entity state
+        if (!await scope.CanAccessAsync(id, user, cancellationToken))
+        {
+            return (null, "Requisition not found or not in scope.");
         }
 
         var req = await db.Requisitions.FirstOrDefaultAsync(r => r.RequisitionId == id, cancellationToken);
@@ -233,6 +238,12 @@ public class RequisitionService(
         if (string.IsNullOrWhiteSpace(reason))
         {
             return (null, "Rejection reason is required.");
+        }
+
+        // 1. Perform Scope / Access Check BEFORE fetching or mutating entity state
+        if (!await scope.CanAccessAsync(id, user, cancellationToken))
+        {
+            return (null, "Requisition not found or not in scope.");
         }
 
         var req = await db.Requisitions.FirstOrDefaultAsync(r => r.RequisitionId == id, cancellationToken);
@@ -312,11 +323,6 @@ public class RequisitionService(
             return (null, "Missing ATS.COMPENSATION.EDIT permission.");
         }
 
-        if (!await scope.CanAccessAsync(id, user, cancellationToken) && !scope.CanViewAll(user))
-        {
-            // Admins with compensation edit typically have view-all; still require access.
-        }
-
         if (!await scope.CanAccessAsync(id, user, cancellationToken))
         {
             return (null, "Requisition not found or not in scope.");
@@ -328,7 +334,6 @@ public class RequisitionService(
             return (null, "Requisition not found.");
         }
 
-        // Published content criteria are not editable; budget is confidential metadata — allowed.
         req.BudgetMin = budgetMin;
         req.BudgetMax = budgetMax;
         req.UpdatedAt = DateTime.UtcNow;
