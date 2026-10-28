@@ -22,7 +22,9 @@ export function HomePage() {
             <Link to="/requisitions">Requisitions</Link>
           </li>
         ) : null}
-        {can(Permissions.PoolView) || can(Permissions.CandidatesManage) ? (
+        {can(Permissions.PoolView) ||
+        can(Permissions.CandidatesManage) ||
+        can(Permissions.ApplicationsManage) ? (
           <li>
             <Link to="/pool">Talent pool</Link>
           </li>

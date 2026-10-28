@@ -107,6 +107,12 @@ namespace RecruitingAts.Api.Controllers
                         message = "A disposition reason is required for Disqualified or NFA."
                     });
 
+                case ApplicationStageUpdateStatus.TerminalStageCannotBeChanged:
+                    return Conflict(new
+                    {
+                        message = "This application is in a terminal stage and cannot be moved."
+                    });
+
                 default:
                     return BadRequest();
             }
@@ -124,5 +130,30 @@ namespace RecruitingAts.Api.Controllers
 
             return Ok(applications);
         }
+
+        [HttpGet("stages")]
+        [Authorize(Policy = Permissions.ApplicationsManage)]
+        public async Task<ActionResult<List<ApplicationPipelineStageDto>>> GetStages(
+            CancellationToken cancellationToken)
+        {
+            var stages = await applicationService.GetPipelineStagesAsync(
+                cancellationToken);
+
+            return Ok(stages);
+        }
+
+
+        [HttpGet("candidates")]
+        [Authorize(Policy = Permissions.ApplicationsManage)]
+        public async Task<ActionResult<List<CandidateListItem>>> GetScopedCandidates(
+            [FromQuery] string? q,
+            CancellationToken cancellationToken)
+        {
+            var candidates = await applicationService.GetScopedCandidatesAsync(
+                User, q, cancellationToken);
+
+            return Ok(candidates);
+        }
+
     }
 }

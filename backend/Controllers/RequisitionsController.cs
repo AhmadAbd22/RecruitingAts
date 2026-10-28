@@ -1,155 +1,224 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using RecruitingAts.Api.Auth;
 using RecruitingAts.Api.Services;
 
-namespace RecruitingAts.Api.Controllers;
-
-[ApiController]
-[Authorize]
-[Route("api/requisitions")]
-public class RequisitionsController(RequisitionService requisitions) : ControllerBase
+namespace RecruitingAts.Api.Controllers
 {
-    [HttpGet]
-    public async Task<ActionResult<IReadOnlyList<RequisitionListItem>>> List(CancellationToken cancellationToken)
+    [Authorize]
+    [Route("api/[controller]")]
+    [ApiController]
+    public class RequisitionsController : ControllerBase
     {
-        var items = await requisitions.ListAsync(User, cancellationToken);
-        return Ok(items);
-    }
+        private readonly IRequisitionService _requisitionService;
 
-    [HttpGet("{id:guid}")]
-    public async Task<ActionResult<RequisitionDetail>> Get(Guid id, CancellationToken cancellationToken)
-    {
-        var detail = await requisitions.GetAsync(id, User, cancellationToken);
-        return detail is null ? NotFound() : Ok(detail);
-    }
-
-    [HttpPost]
-    [Authorize(Policy = Permissions.RequisitionsManage)]
-    public async Task<ActionResult<RequisitionDetail>> Create(
-        [FromBody] CreateRequisitionRequest request,
-        CancellationToken cancellationToken)
-    {
-        var (detail, error) = await requisitions.CreateAsync(request, User, cancellationToken);
-        if (error is not null)
+        public RequisitionsController(IRequisitionService requisitionService)
         {
-            return BadRequest(new { message = error });
+            _requisitionService = requisitionService;
         }
 
-        return CreatedAtAction(nameof(Get), new { id = detail!.RequisitionId }, detail);
-    }
-
-    [HttpPost("{id:guid}/submit")]
-    [Authorize(Policy = Permissions.RequisitionsManage)]
-    public async Task<ActionResult<RequisitionDetail>> Submit(Guid id, CancellationToken cancellationToken)
-    {
-        var (detail, error) = await requisitions.SubmitForApprovalAsync(id, User, cancellationToken);
-        return ToResult(detail, error);
-    }
-
-    [HttpPost("{id:guid}/approve")]
-    [Authorize(Policy = Permissions.RequisitionsApprove)]
-    public async Task<ActionResult<RequisitionDetail>> Approve(Guid id, CancellationToken cancellationToken)
-    {
-        var (detail, error) = await requisitions.ApproveAsync(id, User, cancellationToken);
-        return ToResult(detail, error);
-    }
-
-    [HttpPost("{id:guid}/reject")]
-    [Authorize(Policy = Permissions.RequisitionsApprove)]
-    public async Task<ActionResult<RequisitionDetail>> Reject(
-        Guid id,
-        [FromBody] ReasonRequest request,
-        CancellationToken cancellationToken)
-    {
-        var (detail, error) = await requisitions.RejectAsync(id, request.Reason, User, cancellationToken);
-        return ToResult(detail, error);
-    }
-
-    [HttpPost("{id:guid}/publish")]
-    [Authorize(Policy = Permissions.RequisitionsManage)]
-    public async Task<ActionResult<RequisitionDetail>> Publish(Guid id, CancellationToken cancellationToken)
-    {
-        var (detail, error) = await requisitions.PublishAsync(id, User, cancellationToken);
-        return ToResult(detail, error);
-    }
-
-    [HttpPost("{id:guid}/status")]
-    [Authorize(Policy = Permissions.RequisitionsManage)]
-    public async Task<ActionResult<RequisitionDetail>> ChangeStatus(
-        Guid id,
-        [FromBody] StatusChangeRequest request,
-        CancellationToken cancellationToken)
-    {
-        var (detail, error) = await requisitions.ChangeStatusAsync(
-            id,
-            request.Status,
-            request.Reason,
-            User,
-            cancellationToken);
-        return ToResult(detail, error);
-    }
-
-    [HttpPut("{id:guid}/budget")]
-    [Authorize(Policy = Permissions.CompensationEdit)]
-    public async Task<ActionResult<RequisitionDetail>> UpdateBudget(
-        Guid id,
-        [FromBody] BudgetRequest request,
-        CancellationToken cancellationToken)
-    {
-        var (detail, error) = await requisitions.UpdateBudgetAsync(
-            id,
-            request.BudgetMin,
-            request.BudgetMax,
-            User,
-            cancellationToken);
-        return ToResult(detail, error);
-    }
-
-    [HttpPost("{id:guid}/team")]
-    [Authorize(Policy = Permissions.RequisitionsManage)]
-    public async Task<ActionResult<RequisitionDetail>> AddTeamMember(
-        Guid id,
-        [FromBody] AddTeamMemberRequest request,
-        CancellationToken cancellationToken)
-    {
-        var (detail, error) = await requisitions.AddTeamMemberAsync(
-            id,
-            request.EmployeeId,
-            request.TeamRole,
-            User,
-            cancellationToken);
-        return ToResult(detail, error);
-    }
-
-    [HttpDelete("{id:guid}/team/{teamMemberId:guid}")]
-    [Authorize(Policy = Permissions.RequisitionsManage)]
-    public async Task<IActionResult> RemoveTeamMember(
-        Guid id,
-        Guid teamMemberId,
-        CancellationToken cancellationToken)
-    {
-        var (ok, error) = await requisitions.RemoveTeamMemberAsync(id, teamMemberId, User, cancellationToken);
-        if (!ok)
+        [HttpGet]
+        public async Task<IActionResult> GetRequisitions(CancellationToken cancellationToken)
         {
-            return BadRequest(new { message = error });
+            var list = await _requisitionService.ListAsync(User, cancellationToken);
+            return Ok(list);
         }
 
-        return NoContent();
-    }
-
-    private ActionResult<RequisitionDetail> ToResult(RequisitionDetail? detail, string? error)
-    {
-        if (error is not null)
+        [HttpGet("{id:guid}")]
+        public async Task<IActionResult> GetRequisition(Guid id, CancellationToken cancellationToken)
         {
-            return BadRequest(new { message = error });
+            var detail = await _requisitionService.GetAsync(id, User, cancellationToken);
+            if (detail is null)
+            {
+                return NotFound(new { message = "Requisition not found or not in scope." });
+            }
+            return Ok(detail);
         }
 
-        return detail is null ? NotFound() : Ok(detail);
+        [HttpPost]
+        [Authorize(Policy = "REQUISITIONS.MANAGE")]
+        public async Task<IActionResult> Create([FromBody] CreateRequisitionRequest request, CancellationToken cancellationToken)
+        {
+            var (detail, error) = await _requisitionService.CreateAsync(request, User, cancellationToken);
+            if (error is not null)
+            {
+                return BadRequest(new { message = error });
+            }
+            return CreatedAtAction(nameof(GetRequisition), new { id = detail!.RequisitionId }, detail);
+        }
+
+        [HttpPost("{id:guid}/submit")]
+        [Authorize(Policy = "REQUISITIONS.MANAGE")]
+        public async Task<IActionResult> SubmitForApproval(Guid id, CancellationToken cancellationToken)
+        {
+            var (detail, error) = await _requisitionService.SubmitForApprovalAsync(id, User, cancellationToken);
+            if (error is not null)
+            {
+                return BadRequest(new { message = error });
+            }
+            return Ok(detail);
+        }
+
+        [HttpPost("{id:guid}/approve")]
+        [Authorize(Policy = "REQUISITIONS.APPROVE")]
+        public async Task<IActionResult> Approve(Guid id, CancellationToken cancellationToken)
+        {
+            var (detail, error) = await _requisitionService.ApproveAsync(id, User, cancellationToken);
+            if (error is not null)
+            {
+                return BadRequest(new { message = error });
+            }
+            return Ok(detail);
+        }
+
+        public class StatusReasonRequest
+        {
+            public string Reason { get; set; } = string.Empty;
+        }
+
+        [HttpPost("{id:guid}/reject")]
+        [Authorize(Policy = "REQUISITIONS.APPROVE")]
+        public async Task<IActionResult> Reject(Guid id, [FromBody] StatusReasonRequest request, CancellationToken cancellationToken)
+        {
+            if (string.IsNullOrWhiteSpace(request?.Reason))
+            {
+                return BadRequest(new { message = "A comment/reason is required when rejecting a requisition." });
+            }
+
+            var (detail, error) = await _requisitionService.RejectAsync(id, request.Reason, User, cancellationToken);
+            if (error is not null)
+            {
+                return BadRequest(new { message = error });
+            }
+            return Ok(detail);
+        }
+
+        [HttpPost("{id:guid}/publish")]
+        [Authorize(Policy = "REQUISITIONS.MANAGE")]
+        public async Task<IActionResult> Publish(Guid id, CancellationToken cancellationToken)
+        {
+            var (detail, error) = await _requisitionService.PublishAsync(id, User, cancellationToken);
+            if (error is not null)
+            {
+                return BadRequest(new { message = error });
+            }
+            return Ok(detail);
+        }
+
+        [HttpPost("{id:guid}/hold")]
+        [Authorize(Policy = "REQUISITIONS.MANAGE")]
+        public async Task<IActionResult> Hold(Guid id, [FromBody] StatusReasonRequest request, CancellationToken cancellationToken)
+        {
+            if (string.IsNullOrWhiteSpace(request?.Reason))
+            {
+                return BadRequest(new { message = "A reason is required when putting a requisition on hold." });
+            }
+
+            var (detail, error) = await _requisitionService.ChangeStatusAsync(id, "OnHold", request.Reason, User, cancellationToken);
+            if (error is not null)
+            {
+                return BadRequest(new { message = error });
+            }
+            return Ok(detail);
+        }
+
+        [HttpPost("{id:guid}/close")]
+        [Authorize(Policy = "REQUISITIONS.MANAGE")]
+        public async Task<IActionResult> Close(Guid id, [FromBody] StatusReasonRequest request, CancellationToken cancellationToken)
+        {
+            if (string.IsNullOrWhiteSpace(request?.Reason))
+            {
+                return BadRequest(new { message = "A reason is required when closing a requisition." });
+            }
+
+            var (detail, error) = await _requisitionService.ChangeStatusAsync(id, "Closed", request.Reason, User, cancellationToken);
+            if (error is not null)
+            {
+                return BadRequest(new { message = error });
+            }
+            return Ok(detail);
+        }
+
+        [HttpPost("{id:guid}/cancel")]
+        [Authorize(Policy = "REQUISITIONS.MANAGE")]
+        public async Task<IActionResult> Cancel(Guid id, [FromBody] StatusReasonRequest request, CancellationToken cancellationToken)
+        {
+            if (string.IsNullOrWhiteSpace(request?.Reason))
+            {
+                return BadRequest(new { message = "A reason is required when cancelling a requisition." });
+            }
+
+            var (detail, error) = await _requisitionService.ChangeStatusAsync(id, "Cancelled", request.Reason, User, cancellationToken);
+            if (error is not null)
+            {
+                return BadRequest(new { message = error });
+            }
+            return Ok(detail);
+        }
+
+        [HttpPost("{id:guid}/fill")]
+        [Authorize(Policy = "REQUISITIONS.MANAGE")]
+        public async Task<IActionResult> Fill(Guid id, [FromBody] StatusReasonRequest request, CancellationToken cancellationToken)
+        {
+            var reason = string.IsNullOrWhiteSpace(request?.Reason) ? "Position successfully filled." : request.Reason;
+            var (detail, error) = await _requisitionService.ChangeStatusAsync(id, "Filled", reason, User, cancellationToken);
+            if (error is not null)
+            {
+                return BadRequest(new { message = error });
+            }
+            return Ok(detail);
+        }
+
+        public class UpdateBudgetRequest
+        {
+            public decimal? BudgetMin { get; set; }
+            public decimal? BudgetMax { get; set; }
+        }
+
+        [HttpPut("{id:guid}/budget")]
+        [Authorize(Policy = "ATS.COMPENSATION.EDIT")]
+        public async Task<IActionResult> UpdateBudget(Guid id, [FromBody] UpdateBudgetRequest request, CancellationToken cancellationToken)
+        {
+            var (detail, error) = await _requisitionService.UpdateBudgetAsync(id, request?.BudgetMin, request?.BudgetMax, User, cancellationToken);
+            if (error is not null)
+            {
+                return BadRequest(new { message = error });
+            }
+            return Ok(detail);
+        }
+
+        public class AddTeamMemberRequest
+        {
+            public Guid EmployeeId { get; set; }
+            public string TeamRole { get; set; } = string.Empty;
+        }
+
+        [HttpPost("{id:guid}/team-members")]
+        [Authorize(Policy = "REQUISITIONS.MANAGE")]
+        public async Task<IActionResult> AddTeamMember(Guid id, [FromBody] AddTeamMemberRequest request, CancellationToken cancellationToken)
+        {
+            if (request == null || string.IsNullOrWhiteSpace(request.TeamRole))
+            {
+                return BadRequest(new { message = "Valid EmployeeId and TeamRole are required." });
+            }
+
+            var (detail, error) = await _requisitionService.AddTeamMemberAsync(id, request.EmployeeId, request.TeamRole, User, cancellationToken);
+            if (error is not null)
+            {
+                return BadRequest(new { message = error });
+            }
+            return Ok(detail);
+        }
+
+        [HttpDelete("{id:guid}/team-members/{teamMemberId:guid}")]
+        [Authorize(Policy = "REQUISITIONS.MANAGE")]
+        public async Task<IActionResult> RemoveTeamMember(Guid id, Guid teamMemberId, CancellationToken cancellationToken)
+        {
+            var (ok, error) = await _requisitionService.RemoveTeamMemberAsync(id, teamMemberId, User, cancellationToken);
+            if (!ok)
+            {
+                return BadRequest(new { message = error });
+            }
+            return Ok(new { message = "Team member removed successfully." });
+        }
     }
 }
-
-public record ReasonRequest(string Reason);
-public record StatusChangeRequest(string Status, string? Reason);
-public record BudgetRequest(decimal? BudgetMin, decimal? BudgetMax);
-public record AddTeamMemberRequest(Guid EmployeeId, string TeamRole);

@@ -12,6 +12,8 @@ builder.Services.AddControllers()
     .AddJsonOptions(options =>
     {
         options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter());
+        // Added to prevent object cycle serialization errors
+        options.JsonSerializerOptions.ReferenceHandler = ReferenceHandler.IgnoreCycles;
     });
 
 builder.Services.AddOpenApi();
@@ -73,7 +75,10 @@ builder.Services.AddCors(options =>
 builder.Services.AddScoped<IFileStorage, LocalFileStorage>();
 builder.Services.AddScoped<IAuditService, AuditService>();
 builder.Services.AddScoped<IRequisitionScopeService, RequisitionScopeService>();
-builder.Services.AddScoped<RequisitionService>();
+
+// Updated to register the interface alongside the service implementation:
+builder.Services.AddScoped<IRequisitionService, RequisitionService>();
+
 builder.Services.AddScoped<CandidateService>();
 builder.Services.AddScoped<ApplicationService>();
 

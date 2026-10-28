@@ -1,11 +1,30 @@
 import axios from 'axios'
+import type {
+  ApplicationPipelineItemDto,
+  CandidateListItem,
+  CreateApplicationRequest,
+  CreateApplicationResponse,
+  PipelineStage,
+  RequisitionListItem,
+  UpdateApplicationStageRequest,
+} from '../types/domain'
 
 export const api = axios.create({
   baseURL: '/api',
   withCredentials: true,
-  headers: {
-    'Content-Type': 'application/json',
-  },
+})
+
+/** FormData must keep multipart boundary — never force application/json. */
+api.interceptors.request.use((config) => {
+  if (config.data instanceof FormData) {
+    const headers = config.headers
+    if (headers && typeof headers.delete === 'function') {
+      headers.delete('Content-Type')
+    } else if (headers) {
+      delete (headers as Record<string, unknown>)['Content-Type']
+    }
+  }
+  return config
 })
 
 export type UserDto = {
@@ -61,4 +80,45 @@ export async function logout() {
 export async function getMe() {
   const { data } = await api.get<UserDto>('/auth/me')
   return data
+}
+
+export async function searchCandidates(query: string) {
+  const { data } = await api.get<CandidateListItem[]>('/candidates', {
+    params: { q: query },
+  })
+  return data
+}
+
+export async function searchApplicationCandidates(query: string) {
+  const { data } = await api.get<CandidateListItem[]>('/applications/candidates', {
+    params: { q: query },
+  })
+  return data
+}
+
+export async function getRequisitions() {
+  const { data } = await api.get<RequisitionListItem[]>('/requisitions')
+  return data
+}
+
+export async function getPipeline() {
+  const { data } = await api.get<ApplicationPipelineItemDto[]>('/applications/pipeline')
+  return data
+}
+
+export async function getPipelineStages() {
+  const { data } = await api.get<PipelineStage[]>('/applications/stages')
+  return data
+}
+
+export async function createApplication(request: CreateApplicationRequest) {
+  const { data } = await api.post<CreateApplicationResponse>('/applications', request)
+  return data
+}
+
+export async function updateApplicationStage(
+  applicationId: string,
+  request: UpdateApplicationStageRequest,
+) {
+  await api.patch<void>(`/applications/${applicationId}/stage`, request)
 }

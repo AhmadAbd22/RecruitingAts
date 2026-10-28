@@ -1,12 +1,17 @@
 import { Drawer, Button } from '../shared'
-import type { PipelineStage } from '../../types/domain'
+
+export type StageMoveOption = {
+  pipelineStageId: string
+  name: string
+}
 
 export type StageMoveDrawerProps = {
   open: boolean
   applicationId?: string | null
   candidateName?: string
   currentStageId?: string
-  stages: PipelineStage[]
+  currentStageIsTerminal?: boolean
+  stages: StageMoveOption[]
   dispositionReason: string
   onDispositionReasonChange: (value: string) => void
   onStageChange: (stageId: string) => void
@@ -15,6 +20,11 @@ export type StageMoveDrawerProps = {
   onConfirm: () => void
   needsDisposition?: boolean
   error?: string | null
+  isSubmitting?: boolean
+  canSubmitStage?: boolean
+  stagesLoading?: boolean
+  stagesError?: string | null
+  onRetryStages?: () => void
 }
 
 /** Owner: Abdul-Manan — FR-APP-005 / FR-APP-006 */
@@ -22,6 +32,7 @@ export function StageMoveDrawer({
   open,
   applicationId,
   candidateName = 'Candidate',
+  currentStageIsTerminal = false,
   stages,
   dispositionReason,
   onDispositionReasonChange,
@@ -31,6 +42,11 @@ export function StageMoveDrawer({
   onConfirm,
   needsDisposition,
   error,
+  isSubmitting = false,
+  canSubmitStage = true,
+  stagesLoading = false,
+  stagesError,
+  onRetryStages,
 }: StageMoveDrawerProps) {
   return (
     <Drawer
@@ -40,35 +56,72 @@ export function StageMoveDrawer({
       onClose={onClose}
       footer={
         <>
-          <Button onClick={onClose}>Cancel</Button>
-          <Button variant="primary" onClick={onConfirm}>
-            Update stage
+          <Button onClick={onClose} disabled={isSubmitting}>Cancel</Button>
+          <Button
+            variant="primary"
+            onClick={onConfirm}
+            disabled={isSubmitting || !canSubmitStage || currentStageIsTerminal}
+          >
+            {isSubmitting
+              ? 'Updating…'
+              : stagesLoading
+                ? 'Loading stages…'
+                : 'Update stage'}
           </Button>
         </>
       }
     >
-      <label className="field">
-        Target stage
-        <select value={selectedStageId} onChange={(e) => onStageChange(e.target.value)}>
-          {stages.map((s) => (
-            <option key={s.pipelineStageId} value={s.pipelineStageId}>
-              {s.name}
-            </option>
-          ))}
-        </select>
-      </label>
-      {needsDisposition ? (
-        <label className="field">
-          Disposition reason
-          <textarea
-            value={dispositionReason}
-            placeholder="Required for Disqualified or NFA"
-            onChange={(e) => onDispositionReasonChange(e.target.value)}
-          />
-        </label>
-      ) : null}
+      {stagesLoading ? (
+        <div className="empty-state" role="status">Loading active stages…</div>
+      ) : stagesError ? (
+        <div className="panel">
+          <p className="error" role="alert">{stagesError}</p>
+          {onRetryStages ? (
+            <Button variant="primary" onClick={onRetryStages}>
+              Retry stage catalog
+            </Button>
+          ) : null}
+        </div>
+      ) : stages.length === 0 ? (
+        <div className="empty-state" role="status">
+          <strong>No active stages</strong>
+          <p>There are no active pipeline stages available to select.</p>
+        </div>
+      ) : currentStageIsTerminal ? (
+        <div className="empty-state" role="status">
+          <strong>Stage changes unavailable</strong>
+          <p>Applications in Hired, Disqualified, or NFA cannot be moved using this action.</p>
+        </div>
+      ) : (
+        <>
+          <label className="field">
+            Target stage
+            <select
+              value={selectedStageId}
+              onChange={(e) => onStageChange(e.target.value)}
+              disabled={isSubmitting || !canSubmitStage}
+            >
+              {stages.map((s) => (
+                <option key={s.pipelineStageId} value={s.pipelineStageId}>
+                  {s.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          {needsDisposition ? (
+            <label className="field">
+              Disposition reason
+              <textarea
+                value={dispositionReason}
+                placeholder="Required for Disqualified or NFA"
+                onChange={(e) => onDispositionReasonChange(e.target.value)}
+                disabled={isSubmitting}
+              />
+            </label>
+          ) : null}
+        </>
+      )}
       {error ? <p className="error">{error}</p> : null}
-      {/* TODO: PATCH /api/applications/{id}/stage */}
     </Drawer>
   )
 }
