@@ -18,7 +18,8 @@ public class Requisition
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 
-    public Employee HiringManager { get; set; } = null!;
+    // Marked with ? so model validation does not demand full object in JSON body
+    public Employee? HiringManager { get; set; }
     public ICollection<RequisitionTeamMember> TeamMembers { get; set; } = new List<RequisitionTeamMember>();
     public ICollection<Application> Applications { get; set; } = new List<Application>();
 }
