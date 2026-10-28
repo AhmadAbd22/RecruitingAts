@@ -107,6 +107,12 @@ namespace RecruitingAts.Api.Controllers
                         message = "A disposition reason is required for Disqualified or NFA."
                     });
 
+                case ApplicationStageUpdateStatus.TerminalStageCannotBeChanged:
+                    return Conflict(new
+                    {
+                        message = "This application is in a terminal stage and cannot be moved."
+                    });
+
                 default:
                     return BadRequest();
             }
