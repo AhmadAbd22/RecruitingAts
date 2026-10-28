@@ -1,13 +1,15 @@
+import { Button } from '../shared'
 import type { CandidateListItem } from '../../types/domain'
 import { DataTable, StatusChip } from '../shared'
 
 export type CandidateListProps = {
   items: CandidateListItem[]
   onSelect?: (candidateId: string) => void
+  onAddToRequisition?: (candidate: CandidateListItem) => void
 }
 
 /** Owner: Ibtesam */
-export function CandidateList({ items, onSelect }: CandidateListProps) {
+export function CandidateList({ items, onSelect, onAddToRequisition }: CandidateListProps) {
   return (
     <DataTable
       rows={items}
@@ -24,6 +26,22 @@ export function CandidateList({ items, onSelect }: CandidateListProps) {
           header: 'Resume',
           render: (c) => (c.hasResume ? <StatusChip status="PDF" tone="ok" /> : '—'),
         },
+        ...(onAddToRequisition
+          ? [{
+              key: 'application',
+              header: 'Application',
+              render: (c: CandidateListItem) => (
+                <Button
+                  onClick={(event) => {
+                    event.stopPropagation()
+                    onAddToRequisition(c)
+                  }}
+                >
+                  Add to requisition
+                </Button>
+              ),
+            }]
+          : []),
       ]}
     />
   )

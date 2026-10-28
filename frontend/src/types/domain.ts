@@ -40,7 +40,7 @@ export type CandidateListItem = {
   fullName: string
   email: string
   phone: string
-  source?: string | null
+  source: string | null
   hasResume: boolean
 }
 
@@ -56,6 +56,37 @@ export type PipelineApplication = {
   matchScore?: number | null
   matchLabel?: string | null
   createdAt: string
+}
+
+export type ApplicationPipelineItemDto = {
+  applicationId: string
+  candidateId: string
+  requisitionId: string
+  requisitionTitle: string
+  pipelineStageId: string
+  stageName: string
+  source: string | null
+  createdAt: string
+}
+
+export type CreateApplicationRequest = {
+  candidateId: string
+  requisitionId: string
+  source: string | null
+}
+
+export type CreateApplicationResponse = {
+  applicationId: string
+  candidateId: string
+  requisitionId: string
+  pipelineStageId: string
+  source: string | null
+  createdAt: string
+}
+
+export type UpdateApplicationStageRequest = {
+  pipelineStageId: string
+  dispositionReason: string | null
 }
 
 export type PipelineStage = {
