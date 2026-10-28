@@ -88,6 +88,7 @@ namespace RecruitingAts.Api.Services
     application);
         }
 
+
         public async Task<ApplicationStageUpdateResult> UpdateStageAsync(
             Guid applicationId,
             UpdateApplicationStageRequest request,
@@ -103,16 +104,29 @@ namespace RecruitingAts.Api.Services
                 return new(ApplicationStageUpdateStatus.ApplicationNotFound);
 
             var canAccess = await requisitionScope.CanAccessAsync(
-    application.RequisitionId,
-    user,
-    cancellationToken);
+                application.RequisitionId,
+                user,
+                cancellationToken);
 
             if (!canAccess)
                 return new(ApplicationStageUpdateStatus.Forbidden);
 
+            var currentStage = await db.PipelineStages
+                .FirstOrDefaultAsync(
+                    s => s.PipelineStageId == application.PipelineStageId,
+                    cancellationToken);
+
+            if (currentStage is null)
+                return new(ApplicationStageUpdateStatus.StageNotFound);
+
+            // NEW: Don't allow ordinary changes out of terminal stages.
+            if (currentStage.IsTerminal)
+                return new(ApplicationStageUpdateStatus.TerminalStageCannotBeChanged);
+
             var stage = await db.PipelineStages
                 .FirstOrDefaultAsync(
-                    s => s.PipelineStageId == request.PipelineStageId,
+                    s => s.PipelineStageId == request.PipelineStageId &&
+                         s.IsActive,
                     cancellationToken);
 
             if (stage is null)
@@ -126,16 +140,24 @@ namespace RecruitingAts.Api.Services
             }
 
             application.PipelineStageId = stage.PipelineStageId;
+
             if (stage.Name == PipelineStageNames.Disqualified ||
                 stage.Name == PipelineStageNames.Nfa)
             {
                 application.DispositionReason = request.DispositionReason;
             }
+            else
+            {
+                application.DispositionReason = null;
+            }
+
             application.UpdatedAt = DateTime.UtcNow;
 
             await db.SaveChangesAsync(cancellationToken);
+
             return new(ApplicationStageUpdateStatus.Success);
         }
+
 
         public async Task<List<ApplicationPipelineItemDto>> GetPipelineAsync(
     ClaimsPrincipal user,
@@ -156,6 +178,7 @@ namespace RecruitingAts.Api.Services
                 .Select(a => new ApplicationPipelineItemDto(
                     a.ApplicationId,
                     a.CandidateId,
+                    a.Candidate.FullName,
                     a.RequisitionId,
                     a.Requisition.Title,
                     a.PipelineStageId,
@@ -164,17 +187,82 @@ namespace RecruitingAts.Api.Services
                     a.CreatedAt))
                 .ToListAsync(cancellationToken);
         }
+
+
+
+        public async Task<List<CandidateListItem>> GetScopedCandidatesAsync(
+            ClaimsPrincipal user,
+            string? query,
+            CancellationToken cancellationToken = default)
+        {
+            var employeeId = await requisitionScope.GetEmployeeIdAsync(
+                user, cancellationToken);
+
+            var scopedRequisitions = requisitionScope.Scope(
+                db.Requisitions.AsNoTracking(),
+                user,
+                employeeId);
+
+            var candidates = db.Applications
+                .AsNoTracking()
+                .Where(a => scopedRequisitions.Any(
+                    r => r.RequisitionId == a.RequisitionId))
+                .Select(a => a.Candidate)
+                .Distinct();
+
+            if (!string.IsNullOrWhiteSpace(query))
+            {
+                var term = query.Trim().ToLowerInvariant();
+
+                candidates = candidates.Where(c =>
+                    c.FullName.ToLower().Contains(term) ||
+                    c.Email.ToLower().Contains(term) ||
+                    c.Phone.Contains(term));
+            }
+
+            return await candidates
+                .OrderBy(c => c.FullName)
+                .Take(100)
+                .Select(c => new CandidateListItem(
+                    c.CandidateId,
+                    c.FullName,
+                    c.Email,
+                    c.Phone,
+                    c.Source,
+                    c.ResumePath != null))
+                .ToListAsync(cancellationToken);
+        }
+
+
+        public async Task<List<ApplicationPipelineStageDto>> GetPipelineStagesAsync(
+            CancellationToken cancellationToken = default)
+        {
+            return await db.PipelineStages
+                .AsNoTracking()
+                .Where(stage => stage.IsActive)
+                .OrderBy(stage => stage.SortOrder)
+                .Select(stage => new ApplicationPipelineStageDto(
+                    stage.PipelineStageId,
+                    stage.Name,
+                    stage.SortOrder))
+                .ToListAsync(cancellationToken);
+        }
     }
 
     public record ApplicationPipelineItemDto(
     Guid ApplicationId,
     Guid CandidateId,
+    string CandidateName,
     Guid RequisitionId,
     string RequisitionTitle,
     Guid PipelineStageId,
     string StageName,
     string? Source,
     DateTime CreatedAt);
+    public record ApplicationPipelineStageDto(
+        Guid PipelineStageId,
+        string Name,
+        int SortOrder);
     public record UpdateApplicationStageRequest(
         Guid PipelineStageId,
         string? DispositionReason
@@ -194,7 +282,8 @@ public enum ApplicationStageUpdateStatus
     ApplicationNotFound,
     Forbidden,
     StageNotFound,
-    DispositionReasonRequired
+    DispositionReasonRequired,
+    TerminalStageCannotBeChanged
 }
 
 public record ApplicationStageUpdateResult(

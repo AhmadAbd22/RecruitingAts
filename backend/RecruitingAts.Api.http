@@ -1,6 +1,88 @@
 @RecruitingAts.Api_HostAddress = http://localhost:5277
 
-GET {{RecruitingAts.Api_HostAddress}}/weatherforecast/
+### 1. Health Check
+GET {{RecruitingAts.Api_HostAddress}}/api/health
 Accept: application/json
 
-###
+### 2. Login as Demo Admin
+POST {{RecruitingAts.Api_HostAddress}}/api/auth/login
+Content-Type: application/json
+
+{
+  "email": "admin@demo.local",
+  "password": "Pass123!"
+}
+
+### 3. Get Existing Requisitions (To find a valid Employee ID)
+GET {{RecruitingAts.Api_HostAddress}}/api/requisitions
+Accept: application/json
+
+### 4. FR-REQ-001: Create Requisition
+
+
+### FR-REQ-001: Create Requisition
+POST {{RecruitingAts.Api_HostAddress}}/api/requisitions
+Content-Type: application/json
+
+{
+  "title": "Senior C# Developer",
+  "department": "Engineering",
+  "employmentType": "Full-Time",
+  "seniority": "Senior",
+  "skills": "C#, ASP.NET Core",
+  "jobDescription": "Backend Developer",
+  "openings": 1,
+  "hiringManagerEmployeeId": "793a1a0a-0f92-425c-9e29-21ad3d3720bb" 
+}
+
+### 1. Submit Requisition for Approval (Draft -> PendingApproval)
+POST {{RecruitingAts.Api_HostAddress}}/api/requisitions/425a941e-b7b5-41b6-9617-cd9017e8b1f8/submit
+
+
+### 2. Approve Requisition (PendingApproval -> Approved)
+POST {{RecruitingAts.Api_HostAddress}}/api/requisitions/425a941e-b7b5-41b6-9617-cd9017e8b1f8/approve
+
+
+### 3. Reject Requisition (PendingApproval -> Draft with a comment)
+POST {{RecruitingAts.Api_HostAddress}}/api/requisitions/425a941e-b7b5-41b6-9617-cd9017e8b1f8/reject
+Content-Type: application/json
+
+{
+  "reason": "Needs higher budget allocation before review."
+}
+
+### FR-REQ-003: Update Requisition (Allowed in Draft status)
+PUT {{RecruitingAts.Api_HostAddress}}/api/requisitions/425a941e-b7b5-41b6-9617-cd9017e8b1f8
+Content-Type: application/json
+
+{
+  "title": "Senior Backend Architect",
+  "department": "Engineering",
+  "employmentType": "Full-Time",
+  "seniority": "Senior",
+  "skills": "C#, ASP.NET Core, EF Core, Docker",
+  "jobDescription": "Updated description for lead developer.",
+  "openings": 3,
+  "budgetMin": 120000,
+  "budgetMax": 150000
+}
+
+### Test FR-REQ-004: Add Team Member
+POST {{RecruitingAts.Api_HostAddress}}/api/requisitions/425a941e-b7b5-41b6-9617-cd9017e8b1f8/team-members
+Content-Type: application/json
+
+{
+  "employeeId": "dc6e9794-559c-421e-a4df-234e16dc6e24",
+  "teamRole": "Recruiter"
+}
+### Remove Team Member (FR-REQ-004)
+DELETE {{RecruitingAts.Api_HostAddress}}/api/requisitions/793a1a0a-0f92-425c-9e29-21ad3d3720bb/team-members/dc6e9794-559c-421e-a4df-234e16dc6e24
+
+
+
+### View Requisition (FR-REQ-007: Budget Access Check)
+GET {{RecruitingAts.Api_HostAddress}}/api/requisitions/425a941e-b7b5-41b6-9617-cd9017e8b1f8
+
+
+### Clone Requisition (FR-REQ-010)
+POST {{RecruitingAts.Api_HostAddress}}/api/requisitions/425a941e-b7b5-41b6-9617-cd9017e8b1f8/clone
