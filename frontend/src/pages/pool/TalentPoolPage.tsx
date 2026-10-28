@@ -1,35 +1,89 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import axios from 'axios'
+
 import {
+  api,
   createApplication,
   getRequisitions,
   Permissions,
   searchApplicationCandidates,
   searchCandidates,
 } from '../../api/client'
+
 import { usePermission } from '../../auth/usePermission'
-import { CandidateForm, CandidateList, DuplicateWarning } from '../../components/candidates'
+
+import { CandidateForm, CandidateList } from '../../components/candidates'
+
 import type { CandidateFormValues } from '../../components/candidates'
-import { Button, EmptyState, Modal, PageHeader, SearchField } from '../../components/shared'
-import type { CandidateListItem, RequisitionListItem } from '../../types/domain'
+import type {
+  CandidateListItem,
+  RequisitionListItem,
+} from '../../types/domain'
+
+import {
+  Button,
+  EmptyState,
+  Modal,
+  PageHeader,
+  SearchField,
+} from '../../components/shared'
+
+import {
+  getApiError,
+  getResumeError,
+  phoneCountries,
+} from './candidatePageHelpers'
+
+import type {
+  ApiFailure,
+  CandidateDetail,
+  DuplicateResult,
+} from './candidatePageHelpers'
+
+const emptyForm: CandidateFormValues = {
+  fullName: '',
+  email: '',
+  phone: '',
+  skills: '',
+  source: 'Referral',
+}
 
 /** Owner: Ibtesam */
 export function TalentPoolPage() {
   const navigate = useNavigate()
+
   const canManage = usePermission(Permissions.CandidatesManage)
   const canViewPool = usePermission(Permissions.PoolView)
   const canManageApplications = usePermission(Permissions.ApplicationsManage)
+
   const canSearchCandidates = canViewPool || canManageApplications
   const usesScopedCandidateSearch = !canViewPool && canManageApplications
+
+  // Candidate search state
   const [q, setQ] = useState('')
   const [candidates, setCandidates] = useState<CandidateListItem[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [searchForbidden, setSearchForbidden] = useState(false)
   const [retryAttempt, setRetryAttempt] = useState(0)
+
+  // Add candidate state
   const [open, setOpen] = useState(false)
-  const [selectedCandidate, setSelectedCandidate] = useState<CandidateListItem | null>(null)
+  const [form, setForm] = useState<CandidateFormValues>(emptyForm)
+  const [phoneCountry, setPhoneCountry] = useState('')
+  const [consentDate, setConsentDate] = useState('')
+  const [resumeFile, setResumeFile] = useState<File | null>(null)
+
+  const [matches, setMatches] = useState<CandidateListItem[]>([])
+  const [formError, setFormError] = useState('')
+  const [formMessage, setFormMessage] = useState('')
+  const [pageMessage, setPageMessage] = useState('')
+  const [busy, setBusy] = useState(false)
+
+  // Add to requisition state
+  const [selectedCandidate, setSelectedCandidate] =
+    useState<CandidateListItem | null>(null)
   const [requisitions, setRequisitions] = useState<RequisitionListItem[]>([])
   const [requisitionsLoading, setRequisitionsLoading] = useState(false)
   const [requisitionsError, setRequisitionsError] = useState<string | null>(null)
@@ -39,15 +93,10 @@ export function TalentPoolPage() {
   const [applicationError, setApplicationError] = useState<string | null>(null)
   const [applicationPending, setApplicationPending] = useState(false)
   const [applicationSuccess, setApplicationSuccess] = useState<string | null>(null)
-  const applicationSubmitLock = useRef(false)
-  const [form, setForm] = useState<CandidateFormValues>({
-    fullName: '',
-    email: '',
-    phone: '',
-    skills: '',
-    source: 'Referral',
-  })
 
+  const applicationSubmitLock = useRef(false)
+
+  // Permission-aware candidate search (single effect)
   useEffect(() => {
     let cancelled = false
 
@@ -71,7 +120,8 @@ export function TalentPoolPage() {
         if (!cancelled) setCandidates(results)
       } catch (cause) {
         if (cancelled) return
-        const forbidden = axios.isAxiosError(cause) && cause.response?.status === 403
+        const forbidden =
+          axios.isAxiosError(cause) && cause.response?.status === 403
         setSearchForbidden(forbidden)
         setError(
           usesScopedCandidateSearch
@@ -93,6 +143,7 @@ export function TalentPoolPage() {
     }
   }, [canSearchCandidates, canViewPool, q, retryAttempt, usesScopedCandidateSearch])
 
+  // Requisition loading for the Add to requisition modal
   useEffect(() => {
     if (!selectedCandidate) return
 
@@ -124,6 +175,142 @@ export function TalentPoolPage() {
     }
   }, [selectedCandidate, requisitionsRetry])
 
+  // Add candidate handlers
+  function openCreateForm() {
+    setForm(emptyForm)
+    setPhoneCountry('')
+    setConsentDate('')
+    setResumeFile(null)
+    setMatches([])
+    setFormError('')
+    setFormMessage('')
+    setPageMessage('')
+    setOpen(true)
+  }
+
+  function closeCreateForm() {
+    if (!busy) {
+      setOpen(false)
+    }
+  }
+
+  function updateForm(values: CandidateFormValues) {
+    setForm(values)
+    setMatches([])
+    setFormError('')
+    setFormMessage('')
+  }
+
+  async function checkDuplicates() {
+    if (busy || !canManage) {
+      return
+    }
+
+    if (!form.email.trim() && !form.phone.trim()) {
+      setFormError('Enter an email address or phone number first.')
+      return
+    }
+
+    setBusy(true)
+    setFormError('')
+    setFormMessage('')
+    setMatches([])
+
+    try {
+      const response = await api.get<DuplicateResult>('/candidates/duplicates', {
+        params: {
+          Email: form.email.trim() || undefined,
+          Phone: form.phone.trim() || undefined,
+          PhoneCountry: phoneCountry || undefined,
+        },
+      })
+
+      setMatches(response.data.matches)
+
+      setFormMessage(
+        response.data.isDuplicate
+          ? 'Existing candidates were found. Check the matches below.'
+          : 'No matching candidates were found. Creation will check again.',
+      )
+    } catch (cause) {
+      setFormError(getApiError(cause))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function createCandidate() {
+    if (busy || !canManage) {
+      return
+    }
+
+    setFormError('')
+    setFormMessage('')
+
+    if (
+      !form.fullName.trim() ||
+      !form.email.trim() ||
+      !form.phone.trim() ||
+      !form.source.trim()
+    ) {
+      setFormError('Full name, email, phone and source are required.')
+      return
+    }
+
+    if (!resumeFile) {
+      setFormError('Please select the required PDF resume.')
+      return
+    }
+
+    const fileError = getResumeError(resumeFile)
+
+    if (fileError) {
+      setFormError(fileError)
+      return
+    }
+
+    const body = new FormData()
+
+    body.append('FullName', form.fullName.trim())
+    body.append('Email', form.email.trim())
+    body.append('Phone', form.phone.trim())
+    body.append('Skills', form.skills.trim())
+    body.append('Source', form.source.trim())
+    body.append('file', resumeFile)
+
+    if (phoneCountry) {
+      body.append('PhoneCountry', phoneCountry)
+    }
+
+    if (consentDate) {
+      body.append('ConsentDate', consentDate)
+    }
+
+    setBusy(true)
+    setMatches([])
+
+    try {
+      const response = await api.postForm<CandidateDetail>('/candidates', body)
+
+      setOpen(false)
+
+      if (canViewPool) {
+        navigate(`/pool/${response.data.candidateId}`)
+      } else {
+        setPageMessage('Candidate created successfully.')
+      }
+    } catch (cause) {
+      if (axios.isAxiosError<ApiFailure>(cause)) {
+        setMatches(cause.response?.data?.duplicate?.matches ?? [])
+      }
+
+      setFormError(getApiError(cause))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  // Add to requisition handlers
   function closeApplicationDialog() {
     if (applicationSubmitLock.current) return
     setSelectedCandidate(null)
@@ -174,7 +361,9 @@ export function TalentPoolPage() {
     }
   }
 
-  const publishedRequisitions = requisitions.filter((requisition) => requisition.status === 'Published')
+  const publishedRequisitions = requisitions.filter(
+    (requisition) => requisition.status === 'Published',
+  )
 
   return (
     <div className="page">
@@ -183,22 +372,42 @@ export function TalentPoolPage() {
         subtitle={
           usesScopedCandidateSearch
             ? 'Search candidates linked to requisitions you can access.'
-            : 'Search and browse candidate profiles.'
+            : 'Search and manage candidate profiles.'
         }
         actions={
-          canManage ? (
-            <Button variant="primary" onClick={() => setOpen(true)}>
-              Add candidate
-            </Button>
-          ) : null
+          <>
+            {canSearchCandidates && (
+              <Button
+                disabled={loading}
+                onClick={() => setRetryAttempt((attempt) => attempt + 1)}
+              >
+                Refresh
+              </Button>
+            )}
+
+            {canManage && (
+              <Button variant="primary" onClick={openCreateForm}>
+                Add candidate
+              </Button>
+            )}
+          </>
         }
       />
-      <SearchField value={q} onChange={setQ} placeholder="Search name, email, or phone…" />
-      {applicationSuccess ? (
+
+      <SearchField
+        value={q}
+        onChange={setQ}
+        placeholder="Search name, email, or phone…"
+      />
+
+      {pageMessage && <p role="status">{pageMessage}</p>}
+
+      {applicationSuccess && (
         <div className="panel" role="status">
           {applicationSuccess}
         </div>
-      ) : null}
+      )}
+
       {loading ? (
         <div className="empty-state" role="status">
           Loading candidates…
@@ -206,11 +415,14 @@ export function TalentPoolPage() {
       ) : error ? (
         <div className="panel">
           <p className="error" role="alert">{error}</p>
-          {!searchForbidden ? (
-            <Button variant="primary" onClick={() => setRetryAttempt((attempt) => attempt + 1)}>
+          {!searchForbidden && (
+            <Button
+              variant="primary"
+              onClick={() => setRetryAttempt((attempt) => attempt + 1)}
+            >
               Retry
             </Button>
-          ) : null}
+          )}
         </div>
       ) : candidates.length === 0 ? (
         <EmptyState
@@ -232,7 +444,11 @@ export function TalentPoolPage() {
       ) : (
         <CandidateList
           items={candidates}
-          onSelect={canViewPool ? (id) => navigate(`/pool/${id}`) : undefined}
+          onSelect={
+            canViewPool
+              ? (candidateId) => navigate(`/pool/${candidateId}`)
+              : undefined
+          }
           onAddToRequisition={
             canManageApplications
               ? (candidate) => {
@@ -247,10 +463,91 @@ export function TalentPoolPage() {
           }
         />
       )}
-      <Modal open={open} title="Add candidate" onClose={() => setOpen(false)}>
-        <DuplicateWarning matches={[]} />
-        <CandidateForm values={form} onChange={setForm} onSubmit={() => setOpen(false)} />
+
+      <Modal open={open} title="Add candidate" onClose={closeCreateForm}>
+        {formError && (
+          <p className="error" role="alert">
+            {formError}
+          </p>
+        )}
+
+        {formMessage && <p role="status">{formMessage}</p>}
+
+        {matches.length > 0 && (
+          <section className="panel">
+            <h3>Existing candidates</h3>
+            <p>
+              Review these records before adding another candidate.
+              {canViewPool && ' Select a row to open the existing profile.'}
+            </p>
+
+            <CandidateList
+              items={matches}
+              onSelect={
+                canViewPool
+                  ? (candidateId) => navigate(`/pool/${candidateId}`)
+                  : undefined
+              }
+            />
+          </section>
+        )}
+
+        <fieldset
+          disabled={busy}
+          className="stack"
+          style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}
+        >
+          <label className="field">
+            Country for a local phone number
+            <select
+              value={phoneCountry}
+              onChange={(event) => {
+                setPhoneCountry(event.target.value)
+                setMatches([])
+                setFormError('')
+                setFormMessage('')
+              }}
+            >
+              <option value="">Choose a country</option>
+              {phoneCountries.map((country) => (
+                <option key={country.code} value={country.code}>
+                  {country.name}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label className="field">
+            Consent date — optional
+            <input
+              type="date"
+              value={consentDate}
+              onChange={(event) => setConsentDate(event.target.value)}
+            />
+          </label>
+
+          <label className="field">
+            Resume — PDF required, maximum 5 MB
+            <input
+              type="file"
+              accept=".pdf,application/pdf"
+              onChange={(event) =>
+                setResumeFile(event.target.files?.[0] ?? null)
+              }
+            />
+          </label>
+
+          <CandidateForm
+            values={form}
+            onChange={updateForm}
+            onCheckDuplicates={() => void checkDuplicates()}
+            onSubmit={() => void createCandidate()}
+          />
+        </fieldset>
+
+        {busy && <p role="status">Please wait...</p>}
       </Modal>
+
       <Modal
         open={!!selectedCandidate}
         title="Add to requisition"
