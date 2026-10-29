@@ -244,7 +244,7 @@ export function PipelineBoardPage() {
       <StageMoveDrawer
         open={!!selectedApplication}
         candidateName={selectedApplication?.candidateName ?? 'Update application stage'}
-        candidateEmail={selectedApplication?.candidateEmail}
+        candidateEmail={selectedApplication?.candidateEmail ?? ''}
         currentStageId={selectedApplication?.pipelineStageId}
         currentStageIsTerminal={currentStageIsTerminal}
         stages={pipelineStages}

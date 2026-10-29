@@ -8,7 +8,7 @@ export type StageMoveOption = {
 export type StageMoveDrawerProps = {
   open: boolean
   candidateName?: string
-  candidateEmail?: string
+  candidateEmail: string
   currentStageId?: string
   currentStageIsTerminal?: boolean
   stages: StageMoveOption[]
@@ -71,7 +71,7 @@ export function StageMoveDrawer({
       }
     >
       <div className="field">
-        <span className="muted">{candidateEmail?.trim() || 'Email unavailable'}</span>
+        <span className="muted">{candidateEmail}</span>
       </div>
       {stagesLoading ? (
         <div className="empty-state" role="status">Loading active stages…</div>

@@ -63,7 +63,7 @@ export type PipelineApplication = {
   applicationId: string
   candidateId: string
   candidateName?: string
-  candidateEmail?: string
+  candidateEmail: string
   requisitionId: string
   requisitionTitle: string
   pipelineStageId: string
