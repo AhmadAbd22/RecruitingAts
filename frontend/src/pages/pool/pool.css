@@ -128,18 +128,28 @@
   display: flex; align-items: flex-start; gap: .75rem;
   width: min(410px, calc(100vw - 32px)); padding: 1rem;
   background: var(--surface); color: var(--ink); border: 1px solid var(--line);
-  border-left: 4px solid var(--ok); border-radius: 10px; overflow: hidden;
+  border-left: 4px solid var(--line); border-radius: 10px; overflow: hidden;
   box-shadow: 0 8px 30px rgba(14, 26, 43, .14);
 }
-.pool-toast--error { border-left-color: var(--danger); }
-.pool-toast--info { border-left-color: var(--accent); }
+.pool-toast--success {
+  background: #f2faf5; color: var(--ok);
+  border-color: color-mix(in srgb, var(--ok) 25%, white); border-left-color: var(--ok);
+}
+.pool-toast--error {
+  background: #fff5f4; color: var(--danger);
+  border-color: color-mix(in srgb, var(--danger) 28%, white); border-left-color: var(--danger);
+}
+.pool-toast--info {
+  background: #eff6ff; color: #1d4ed8; border-color: #bfdbfe; border-left-color: #1d4ed8;
+}
 .pool-toast > div { flex: 1; min-width: 0; }
 .pool-toast strong { display: block; font-size: .88rem; }
 .pool-toast p { margin: .2rem 0 0; font-size: .87rem; overflow-wrap: anywhere; }
-.pool-toast .pool-icon-button { width: 28px; height: 28px; border: 0; font-size: 1.2rem; }
-.pool-toast-icon { display: grid; place-items: center; flex-shrink: 0; width: 25px; height: 25px; border-radius: 50%; font-size: .85rem; font-weight: 700; background: #eaf6ef; color: var(--ok); }
+.pool-toast .pool-icon-button { width: 28px; height: 28px; border: 0; font-size: 1.2rem; color: inherit; background: transparent; }
+.pool-toast-icon { display: grid; place-items: center; flex-shrink: 0; width: 25px; height: 25px; border-radius: 50%; font-size: .85rem; font-weight: 700; background: var(--paper); color: inherit; }
+.pool-toast--success .pool-toast-icon { background: #eaf6ef; color: var(--ok); }
 .pool-toast--error .pool-toast-icon { background: #fff0ee; color: var(--danger); }
-.pool-toast--info .pool-toast-icon { background: #eaf5f3; color: var(--accent-ink); }
+.pool-toast--info .pool-toast-icon { background: #dbeafe; color: #1d4ed8; }
 .pool-toast-timer { position: absolute; bottom: 0; left: 0; height: 3px; width: 100%; background: currentColor; opacity: .2; transform-origin: left; animation: pool-toast-countdown 5s linear forwards; }
 @keyframes pool-spin { to { transform: rotate(360deg); } }
 @keyframes pool-toast-countdown { to { transform: scaleX(0); } }

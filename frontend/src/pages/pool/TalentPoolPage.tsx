@@ -75,8 +75,6 @@ export function TalentPoolPage() {
   const [phoneCountry, setPhoneCountry] = useState('')
   const [consentDate, setConsentDate] = useState('')
   const [resumeFile, setResumeFile] = useState<File | null>(null)
-  const [candidateAwaitingResume, setCandidateAwaitingResume] = useState<CandidateDetail | null>(null)
-  const [candidateSaveNotice, setCandidateSaveNotice] = useState('')
   const createSubmitLock = useRef(false)
 
   const [duplicateResult, setDuplicateResult] = useState<DuplicateResult | null>(null)
@@ -84,7 +82,7 @@ export function TalentPoolPage() {
   const [confirmOpen, setConfirmOpen] = useState(false)
   const [formError, setFormError] = useState('')
   const [formMessage, setFormMessage] = useState('')
-  const [pendingAction, setPendingAction] = useState<'duplicates' | 'create' | 'upload' | null>(null)
+  const [pendingAction, setPendingAction] = useState<'duplicates' | 'create' | null>(null)
   const busy = pendingAction !== null
 
   // Add to requisition state
@@ -143,16 +141,10 @@ export function TalentPoolPage() {
   // Add candidate handlers
   function openCreateForm() {
     dismissToast()
-    if (candidateAwaitingResume) {
-      setOpen(true)
-      return
-    }
     setForm(emptyForm)
     setPhoneCountry('')
     setConsentDate('')
     setResumeFile(null)
-    setCandidateAwaitingResume(null)
-    setCandidateSaveNotice('')
     setDuplicateResult(null)
     setFormError('')
     setFormMessage('')
@@ -179,7 +171,7 @@ export function TalentPoolPage() {
   }
 
   async function checkDuplicates() {
-    if (busy || candidateAwaitingResume || !canManage) {
+    if (busy || !canManage) {
       return
     }
 
@@ -215,7 +207,7 @@ export function TalentPoolPage() {
           ? `${getDuplicateMessage(response.data)} Review the matches, then use an existing candidate or save a separate profile.`
           : 'No matching candidates were found. Creation will check again.'
       setFormMessage(message)
-      notify(message, response.data.isDuplicate ? 'info' : 'success')
+      notify(message, response.data.isHardDuplicate ? 'error' : response.data.isDuplicate ? 'info' : 'success')
     } catch (cause) {
       showFormError(getApiError(cause))
     } finally {
@@ -262,43 +254,29 @@ export function TalentPoolPage() {
     createSubmitLock.current = true
     setPendingAction('create')
     setDuplicateResult(null)
-    let created = candidateAwaitingResume
-    let successMessage = candidateSaveNotice || 'Candidate created successfully.'
+    const successMessage = confirmDuplicate && duplicateResult
+      ? `Candidate saved with matching ${getMatchedContactFields(duplicateResult)}.`
+      : 'Candidate created successfully.'
 
     try {
-      if (!created) {
-        successMessage = confirmDuplicate && duplicateResult
-          ? `Candidate saved with matching ${getMatchedContactFields(duplicateResult)}.`
-          : 'Candidate created successfully.'
-        const { data } = await api.post<CandidateDetail>('/candidates', {
-          fullName: form.fullName.trim(),
-          email: form.email.trim(),
-          phone,
-          skills: form.skills.trim() || null,
-          source: form.source.trim(),
-          consentDate: consentDate || null,
-        }, { params: { confirmDuplicate } })
-        created = data
-        setCandidateAwaitingResume(data)
-        setCandidateSaveNotice(successMessage)
-      }
-
-      // Retry only this step if JSON creation succeeded but the upload failed.
-      setPendingAction('upload')
       const body = new FormData()
+      body.append('FullName', form.fullName.trim())
+      body.append('Email', form.email.trim())
+      body.append('Phone', phone)
+      body.append('Skills', form.skills.trim())
+      body.append('Source', form.source.trim())
+      if (phoneCountry) body.append('PhoneCountry', phoneCountry)
+      if (consentDate) body.append('ConsentDate', consentDate)
       body.append('file', resumeFile)
-      const { data: uploaded } = await api.post<CandidateDetail>(
-        `/candidates/${created.candidateId}/resume`, body,
+      const { data: created } = await api.post<CandidateDetail>(
+        '/candidates', body, { params: { confirmDuplicate } },
       )
-      created = uploaded
 
       setOpen(false)
       setForm(emptyForm)
       setPhoneCountry('')
       setConsentDate('')
       setResumeFile(null)
-      setCandidateAwaitingResume(null)
-      setCandidateSaveNotice('')
       setDuplicateResult(null)
       setFormError('')
       setFormMessage('')
@@ -327,10 +305,6 @@ export function TalentPoolPage() {
 
       notify(successMessage)
     } catch (cause) {
-      if (created) {
-        showFormError(`Candidate saved, but the resume upload failed. ${getApiError(cause)} Select Retry resume upload to attach it to the same candidate.`)
-        return
-      }
       if (axios.isAxiosError<ApiFailure>(cause)) {
         setDuplicateResult(cause.response?.data?.duplicate ?? null)
       }
@@ -465,25 +439,24 @@ export function TalentPoolPage() {
         ) : candidateTable(candidates, true)}
       </section>
 
-      <PoolModal open={open} title="Add candidate" subtitle="Start with their details, then attach a PDF resume."
+      <PoolModal open={open} title="Add candidate" subtitle="Enter their details and attach the required PDF resume."
         busy={busy} onClose={closeCreateForm}
         footer={
           <>
             <Button disabled={busy} onClick={closeCreateForm}>Cancel</Button>
-            <Button disabled={busy || !!candidateAwaitingResume} onClick={() => void checkDuplicates()}>
+            <Button disabled={busy} onClick={() => void checkDuplicates()}>
               {pendingAction === 'duplicates' && <span className="pool-spinner" aria-hidden="true" />}
               {pendingAction === 'duplicates' ? 'Checking...' : 'Check duplicates'}
             </Button>
-            {duplicateResult?.canCreateAnyway && !candidateAwaitingResume ? (
+            {duplicateResult?.canCreateAnyway ? (
               <Button variant="primary" disabled={busy} onClick={() => setConfirmOpen(true)}>
                 Save with duplicate
               </Button>
             ) : (
               <Button variant="primary" type="submit" form="pool-candidate-form"
                 disabled={busy || !!duplicateResult?.isHardDuplicate}>
-                {(pendingAction === 'create' || pendingAction === 'upload') && <span className="pool-spinner" aria-hidden="true" />}
-                {pendingAction === 'create' ? 'Saving...' : pendingAction === 'upload' ? 'Uploading PDF...'
-                  : candidateAwaitingResume ? 'Retry resume upload' : 'Save candidate'}
+                {pendingAction === 'create' && <span className="pool-spinner" aria-hidden="true" />}
+                {pendingAction === 'create' ? 'Saving...' : 'Save candidate'}
               </Button>
             )}
           </>
@@ -491,7 +464,12 @@ export function TalentPoolPage() {
         <PoolToast toast={toast} onDismiss={dismissToast} />
         <div className="stack">
           {formError && <div className="pool-notice pool-notice--error" role="alert">{formError}</div>}
-          {formMessage && <div className={`pool-notice ${matches.length ? '' : 'pool-notice--success'}`}>{formMessage}</div>}
+          {formMessage && (
+            <div className={`pool-notice ${duplicateResult?.isHardDuplicate ? 'pool-notice--error' : matches.length ? '' : 'pool-notice--success'}`}
+              role={duplicateResult?.isHardDuplicate ? 'alert' : 'status'}>
+              {formMessage}
+            </div>
+          )}
           <form id="pool-candidate-form" className="stack" noValidate onSubmit={(event) => {
             event.preventDefault()
             const email = event.currentTarget.elements.namedItem('email')
@@ -502,7 +480,7 @@ export function TalentPoolPage() {
             }
             void createCandidate()
           }}>
-            <fieldset disabled={busy || !!candidateAwaitingResume} className="pool-fieldset pool-form-grid">
+            <fieldset disabled={busy} className="pool-fieldset pool-form-grid">
               <label className="field">
                 <span>Full name <span className="pool-required" aria-hidden="true">*</span></span>
                 <input data-autofocus required autoComplete="name" maxLength={200}
