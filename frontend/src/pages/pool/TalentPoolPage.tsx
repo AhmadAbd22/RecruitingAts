@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import axios from 'axios'
 
 import {
@@ -13,8 +13,6 @@ import {
 
 import { usePermission } from '../../auth/usePermission'
 
-import { CandidateForm, CandidateList } from '../../components/candidates'
-
 import type { CandidateFormValues } from '../../components/candidates'
 import type {
   CandidateListItem,
@@ -24,9 +22,8 @@ import type {
 import {
   Button,
   EmptyState,
-  Modal,
+  DataTable,
   PageHeader,
-  SearchField,
 } from '../../components/shared'
 
 import {
@@ -41,6 +38,11 @@ import type {
   DuplicateResult,
 } from './candidatePageHelpers'
 
+import { PoolModal } from './PoolModal'
+import { PoolToast } from './PoolToast'
+import { usePoolToast } from './usePoolToast'
+import './pool.css'
+
 const emptyForm: CandidateFormValues = {
   fullName: '',
   email: '',
@@ -49,9 +51,9 @@ const emptyForm: CandidateFormValues = {
   source: 'Referral',
 }
 
-/** Owner: Ibtesam */
 export function TalentPoolPage() {
   const navigate = useNavigate()
+  const { toast, notify, dismissToast } = usePoolToast()
 
   const canManage = usePermission(Permissions.CandidatesManage)
   const canViewPool = usePermission(Permissions.PoolView)
@@ -78,8 +80,8 @@ export function TalentPoolPage() {
   const [matches, setMatches] = useState<CandidateListItem[]>([])
   const [formError, setFormError] = useState('')
   const [formMessage, setFormMessage] = useState('')
-  const [pageMessage, setPageMessage] = useState('')
-  const [busy, setBusy] = useState(false)
+  const [pendingAction, setPendingAction] = useState<'duplicates' | 'create' | null>(null)
+  const busy = pendingAction !== null
 
   // Add to requisition state
   const [selectedCandidate, setSelectedCandidate] =
@@ -92,7 +94,6 @@ export function TalentPoolPage() {
   const [applicationSource, setApplicationSource] = useState('')
   const [applicationError, setApplicationError] = useState<string | null>(null)
   const [applicationPending, setApplicationPending] = useState(false)
-  const [applicationSuccess, setApplicationSuccess] = useState<string | null>(null)
 
   const applicationSubmitLock = useRef(false)
 
@@ -177,6 +178,7 @@ export function TalentPoolPage() {
 
   // Add candidate handlers
   function openCreateForm() {
+    dismissToast()
     setForm(emptyForm)
     setPhoneCountry('')
     setConsentDate('')
@@ -184,13 +186,13 @@ export function TalentPoolPage() {
     setMatches([])
     setFormError('')
     setFormMessage('')
-    setPageMessage('')
     setOpen(true)
   }
 
   function closeCreateForm() {
     if (!busy) {
       setOpen(false)
+      dismissToast()
     }
   }
 
@@ -201,17 +203,22 @@ export function TalentPoolPage() {
     setFormMessage('')
   }
 
+  function showFormError(message: string) {
+    setFormError(message)
+    notify(message, 'error')
+  }
+
   async function checkDuplicates() {
     if (busy || !canManage) {
       return
     }
 
     if (!form.email.trim() && !form.phone.trim()) {
-      setFormError('Enter an email address or phone number first.')
+      showFormError('Enter an email address or phone number first.')
       return
     }
 
-    setBusy(true)
+    setPendingAction('duplicates')
     setFormError('')
     setFormMessage('')
     setMatches([])
@@ -227,15 +234,15 @@ export function TalentPoolPage() {
 
       setMatches(response.data.matches)
 
-      setFormMessage(
-        response.data.isDuplicate
-          ? 'Existing candidates were found. Check the matches below.'
-          : 'No matching candidates were found. Creation will check again.',
-      )
+      const message = response.data.isDuplicate
+        ? 'Existing candidates were found. Check the matches below.'
+        : 'No matching candidates were found. Creation will check again.'
+      setFormMessage(message)
+      notify(message, response.data.isDuplicate ? 'info' : 'success')
     } catch (cause) {
-      setFormError(getApiError(cause))
+      showFormError(getApiError(cause))
     } finally {
-      setBusy(false)
+      setPendingAction(null)
     }
   }
 
@@ -253,19 +260,19 @@ export function TalentPoolPage() {
       !form.phone.trim() ||
       !form.source.trim()
     ) {
-      setFormError('Full name, email, phone and source are required.')
+      showFormError('Full name, email, phone and source are required.')
       return
     }
 
     if (!resumeFile) {
-      setFormError('Please select the required PDF resume.')
+      showFormError('Please select the required PDF resume.')
       return
     }
 
     const fileError = getResumeError(resumeFile)
 
     if (fileError) {
-      setFormError(fileError)
+      showFormError(fileError)
       return
     }
 
@@ -288,7 +295,7 @@ export function TalentPoolPage() {
     }
     body.append('file', resumeFile)
 
-    setBusy(true)
+    setPendingAction('create')
     setMatches([])
 
     try {
@@ -310,7 +317,7 @@ export function TalentPoolPage() {
       setFormMessage('')
 
       if (canViewPool) {
-        navigate(`/pool/${created.candidateId}`)
+        navigate(`/pool/${created.candidateId}`, { state: { poolNotice: 'Candidate created successfully.' } })
         return
       }
 
@@ -325,27 +332,28 @@ export function TalentPoolPage() {
           source: created.source,
           hasResume: created.hasResume,
         })
-        setPageMessage(
+        notify(
           `${created.fullName} created. Choose a published requisition to add them.`,
         )
         return
       }
 
-      setPageMessage('Candidate created successfully.')
+      notify('Candidate created successfully.')
     } catch (cause) {
       if (axios.isAxiosError<ApiFailure>(cause)) {
         setMatches(cause.response?.data?.duplicate?.matches ?? [])
       }
 
-      setFormError(getApiError(cause))
+      showFormError(getApiError(cause))
     } finally {
-      setBusy(false)
+      setPendingAction(null)
     }
   }
 
   // Add to requisition handlers
   function closeApplicationDialog() {
     if (applicationSubmitLock.current) return
+    dismissToast()
     setSelectedCandidate(null)
     setRequisitions([])
     setRequisitionsError(null)
@@ -370,7 +378,7 @@ export function TalentPoolPage() {
         requisitionId: selectedRequisitionId,
         source: applicationSource.trim() || null,
       })
-      setApplicationSuccess(
+      notify(
         `${selectedCandidate.fullName} added to ${requisition?.title ?? 'the requisition'}.`,
       )
       setSelectedCandidate(null)
@@ -379,15 +387,9 @@ export function TalentPoolPage() {
       setApplicationSource('')
       setApplicationError(null)
     } catch (cause) {
-      if (axios.isAxiosError<{ message?: string }>(cause)) {
-        setApplicationError(
-          cause.response?.data?.message ?? cause.message ?? 'Unable to add this application.',
-        )
-      } else if (cause instanceof Error) {
-        setApplicationError(cause.message)
-      } else {
-        setApplicationError('An unexpected error occurred while creating the application.')
-      }
+      const message = getApiError(cause)
+      setApplicationError(message)
+      notify(message, 'error')
     } finally {
       applicationSubmitLock.current = false
       setApplicationPending(false)
@@ -398,281 +400,271 @@ export function TalentPoolPage() {
     (requisition) => requisition.status === 'Published',
   )
 
+  function openApplicationDialog(candidate: CandidateListItem) {
+    dismissToast()
+    setSelectedCandidate(candidate)
+    setRequisitions([])
+    setSelectedRequisitionId('')
+    setApplicationSource('')
+    setApplicationError(null)
+  }
+
+  function candidateTable(items: CandidateListItem[], allowApplications = false) {
+    return (
+      <DataTable rows={items} rowKey={(candidate) => candidate.candidateId}
+        onRowClick={canViewPool ? (candidate) => navigate(`/pool/${candidate.candidateId}`) : undefined}
+        columns={[
+          { key: 'name', header: 'Candidate', render: (candidate) => (
+            <div className="pool-name">
+              <span className="pool-avatar" aria-hidden="true">
+                {candidate.fullName.trim().split(/\s+/).slice(0, 2).map((name) => name[0]).join('').toUpperCase()}
+              </span>
+              {canViewPool ? (
+                <Link className="pool-profile-link" to={`/pool/${candidate.candidateId}`}
+                  onClick={(event) => event.stopPropagation()}>{candidate.fullName}</Link>
+              ) : <strong>{candidate.fullName}</strong>}
+            </div>
+          ) },
+          { key: 'email', header: 'Email', render: (candidate) => candidate.email },
+          { key: 'phone', header: 'Phone', render: (candidate) => <span className="mono">{candidate.phone}</span> },
+          { key: 'source', header: 'Source', render: (candidate) => (
+            <span className="pool-badge">{candidate.source || 'Not recorded'}</span>
+          ) },
+          { key: 'resume', header: 'Resume', render: (candidate) => candidate.hasResume
+            ? <span className="pool-badge pool-badge--ok">PDF attached</span>
+            : <span className="pool-hint">Not attached</span> },
+          ...(allowApplications && canManageApplications ? [{
+            key: 'application', header: 'Application', render: (candidate: CandidateListItem) => (
+              <Button onClick={(event) => { event.stopPropagation(); openApplicationDialog(candidate) }}>
+                Add to requisition
+              </Button>
+            ),
+          }] : []),
+        ]} />
+    )
+  }
+
   return (
-    <div className="page">
-      <PageHeader
-        title="Talent pool"
-        subtitle={
-          usesScopedCandidateSearch
-            ? 'Search candidates linked to requisitions you can access.'
-            : 'Search and manage candidate profiles.'
-        }
+    <div className="page pool-page">
+      {!open && !selectedCandidate && <PoolToast toast={toast} onDismiss={dismissToast} />}
+      <PageHeader title="Talent pool"
+        subtitle={usesScopedCandidateSearch
+          ? 'Candidates linked to requisitions you can access.'
+          : 'Find the right person. Keep their details in one place.'}
         actions={
           <>
             {canSearchCandidates && (
-              <Button
-                disabled={loading}
-                onClick={() => setRetryAttempt((attempt) => attempt + 1)}
-              >
-                Refresh
+              <Button disabled={loading} onClick={() => setRetryAttempt((attempt) => attempt + 1)}>
+                {loading && <span className="pool-spinner" aria-hidden="true" />}
+                {loading ? 'Refreshing...' : 'Refresh'}
               </Button>
             )}
-
-            {canManage && (
-              <Button variant="primary" onClick={openCreateForm}>
-                Add candidate
-              </Button>
-            )}
+            {canManage && <Button variant="primary" onClick={openCreateForm}>+ Add candidate</Button>}
           </>
-        }
-      />
+        } />
 
-      <SearchField
-        value={q}
-        onChange={setQ}
-        placeholder="Search name, email, or phone…"
-      />
-
-      {pageMessage && <p role="status">{pageMessage}</p>}
-
-      {applicationSuccess && (
-        <div className="panel" role="status">
-          {applicationSuccess}
-        </div>
+      {canSearchCandidates && (
+        <section className="panel pool-toolbar" aria-label="Candidate search">
+          <div className="pool-search">
+            <svg className="pool-search-icon" width="20" height="20" viewBox="0 0 24 24"
+              fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+              <circle cx="10.5" cy="10.5" r="6.5" /><path d="m16 16 4.5 4.5" />
+            </svg>
+            <input className="pool-search-input" type="search" aria-label="Search candidates"
+              placeholder="Search by name, email or phone" value={q}
+              onChange={(event) => setQ(event.target.value)} />
+            {q && <button className="pool-icon-button pool-search-clear" type="button"
+              aria-label="Clear search" onClick={() => setQ('')}>×</button>}
+          </div>
+        </section>
       )}
 
-      {loading ? (
-        <div className="empty-state" role="status">
-          Loading candidates…
-        </div>
-      ) : error ? (
-        <div className="panel">
-          <p className="error" role="alert">{error}</p>
-          {!searchForbidden && (
-            <Button
-              variant="primary"
-              onClick={() => setRetryAttempt((attempt) => attempt + 1)}
-            >
-              Retry
-            </Button>
-          )}
-        </div>
-      ) : candidates.length === 0 ? (
-        <EmptyState
-          title={
-            q.trim()
-              ? 'No matching candidates'
-              : usesScopedCandidateSearch
-                ? 'No candidates in your requisition scope'
-                : 'No candidates yet'
-          }
-          message={
-            q.trim()
-              ? 'Try a different name, email, or phone number.'
-              : usesScopedCandidateSearch
-                ? 'No candidates linked to requisitions you can access were found.'
-                : 'No candidates are currently available in the talent pool.'
-          }
-        />
-      ) : (
-        <CandidateList
-          items={candidates}
-          onSelect={
-            canViewPool
-              ? (candidateId) => navigate(`/pool/${candidateId}`)
-              : undefined
-          }
-          onAddToRequisition={
-            canManageApplications
-              ? (candidate) => {
-                  setApplicationSuccess(null)
-                  setSelectedCandidate(candidate)
-                  setRequisitions([])
-                  setSelectedRequisitionId('')
-                  setApplicationSource('')
-                  setApplicationError(null)
-                }
-              : undefined
-          }
-        />
-      )}
+      <div className="pool-results-head">
+        <h2>Candidates</h2>
+        {!loading && !error && <p aria-live="polite">
+          {candidates.length} {candidates.length === 1 ? 'candidate' : 'candidates'} shown
+          {candidates.length === 100 && ' · Refine your search for more specific results'}
+        </p>}
+      </div>
 
-      <Modal open={open} title="Add candidate" onClose={closeCreateForm}>
-        {formError && (
-          <p className="error" role="alert">
-            {formError}
-          </p>
-        )}
+      <section aria-label="Candidate results" aria-busy={loading}>
+        {loading ? (
+          <div className="panel pool-loading" role="status">
+            <span className="pool-spinner" aria-hidden="true" /> Searching candidates...
+          </div>
+        ) : error ? (
+          <div className="panel stack">
+            <p className="pool-notice pool-notice--error" role="alert">{error}</p>
+            {!searchForbidden && <div><Button onClick={() => setRetryAttempt((attempt) => attempt + 1)}>Try again</Button></div>}
+          </div>
+        ) : candidates.length === 0 ? (
+          <div className="stack">
+            <EmptyState
+              title={q.trim() ? 'No matching candidates' : usesScopedCandidateSearch
+                ? 'No candidates in your requisition scope' : 'Your talent pool is ready'}
+              message={q.trim() ? 'Try another name, email or phone number.'
+                : usesScopedCandidateSearch ? 'Candidates appear here after being linked to a requisition you can access.'
+                  : 'Add your first candidate with their contact details and PDF resume.'} />
+            {q.trim() && <div><Button onClick={() => setQ('')}>Clear search</Button></div>}
+          </div>
+        ) : candidateTable(candidates, true)}
+      </section>
 
-        {formMessage && <p role="status">{formMessage}</p>}
-
-        {matches.length > 0 && (
-          <section className="panel">
-            <h3>Existing candidates</h3>
-            <p>
-              Review these records before adding another candidate.
-              {canViewPool && ' Select a row to open the existing profile.'}
-            </p>
-
-            <CandidateList
-              items={matches}
-              onSelect={
-                canViewPool
-                  ? (candidateId) => navigate(`/pool/${candidateId}`)
-                  : undefined
-              }
-            />
-          </section>
-        )}
-
-        <fieldset
-          disabled={busy}
-          className="stack"
-          style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}
-        >
-          <label className="field">
-            Country for a local phone number
-            <select
-              value={phoneCountry}
-              onChange={(event) => {
-                setPhoneCountry(event.target.value)
-                setMatches([])
-                setFormError('')
-                setFormMessage('')
-              }}
-            >
-              <option value="">Choose a country</option>
-              {phoneCountries.map((country) => (
-                <option key={country.code} value={country.code}>
-                  {country.name}
-                </option>
-              ))}
-            </select>
-          </label>
-
-          <label className="field">
-            Consent date — optional
-            <input
-              type="date"
-              value={consentDate}
-              onChange={(event) => setConsentDate(event.target.value)}
-            />
-          </label>
-
-          <label className="field">
-            Resume — PDF required, maximum 5 MB
-            <input
-              type="file"
-              accept=".pdf,application/pdf"
-              onChange={(event) =>
-                setResumeFile(event.target.files?.[0] ?? null)
-              }
-            />
-          </label>
-
-          <CandidateForm
-            values={form}
-            onChange={updateForm}
-            onCheckDuplicates={() => void checkDuplicates()}
-            onSubmit={() => void createCandidate()}
-          />
-        </fieldset>
-
-        {busy && <p role="status">Please wait...</p>}
-      </Modal>
-
-      <Modal
-        open={!!selectedCandidate}
-        title="Add to requisition"
-        onClose={closeApplicationDialog}
+      <PoolModal open={open} title="Add candidate" subtitle="Start with their details, then attach a PDF resume."
+        busy={busy} onClose={closeCreateForm}
         footer={
           <>
-            <Button onClick={closeApplicationDialog} disabled={applicationPending}>
-              Cancel
+            <Button disabled={busy} onClick={closeCreateForm}>Cancel</Button>
+            <Button disabled={busy} onClick={() => void checkDuplicates()}>
+              {pendingAction === 'duplicates' && <span className="pool-spinner" aria-hidden="true" />}
+              {pendingAction === 'duplicates' ? 'Checking...' : 'Check duplicates'}
             </Button>
-            <Button
-              variant="primary"
-              onClick={() => void submitApplication()}
-              disabled={
-                applicationPending ||
-                !selectedRequisitionId ||
-                requisitionsLoading ||
-                !!requisitionsError ||
-                publishedRequisitions.length === 0
-              }
-            >
-              {applicationPending ? 'Adding…' : 'Add to requisition'}
+            <Button variant="primary" type="submit" form="pool-candidate-form" disabled={busy}>
+              {pendingAction === 'create' && <span className="pool-spinner" aria-hidden="true" />}
+              {pendingAction === 'create' ? 'Saving...' : 'Save candidate'}
             </Button>
           </>
-        }
-      >
-        {selectedCandidate ? (
+        }>
+        <PoolToast toast={toast} onDismiss={dismissToast} />
+        <div className="stack">
+          {formError && <div className="pool-notice pool-notice--error" role="alert">{formError}</div>}
+          {formMessage && <div className={`pool-notice ${matches.length ? '' : 'pool-notice--success'}`}>{formMessage}</div>}
+          <form id="pool-candidate-form" noValidate onSubmit={(event) => {
+            event.preventDefault()
+            const email = event.currentTarget.elements.namedItem('email')
+            if (email instanceof HTMLInputElement && email.validity.typeMismatch) {
+              showFormError('Enter a valid email address.')
+              email.focus()
+              return
+            }
+            void createCandidate()
+          }}>
+            <fieldset disabled={busy} className="pool-fieldset pool-form-grid">
+              <label className="field">
+                <span>Full name <span className="pool-required" aria-hidden="true">*</span></span>
+                <input data-autofocus required autoComplete="name" maxLength={200}
+                  placeholder="e.g. Ali Ahmed" value={form.fullName}
+                  onChange={(event) => updateForm({ ...form, fullName: event.target.value })} />
+              </label>
+              <label className="field">
+                <span>Email <span className="pool-required" aria-hidden="true">*</span></span>
+                <input required name="email" type="email" autoComplete="email" maxLength={256}
+                  placeholder="name@example.com" value={form.email}
+                  onChange={(event) => updateForm({ ...form, email: event.target.value })} />
+              </label>
+              <label className="field">
+                Country for a local phone number
+                <select value={phoneCountry} onChange={(event) => {
+                  setPhoneCountry(event.target.value)
+                  setMatches([])
+                  setFormError('')
+                  setFormMessage('')
+                }}>
+                  <option value="">Choose a country</option>
+                  {phoneCountries.map((country) => (
+                    <option key={country.code} value={country.code}>{country.name} (+{country.callingCode})</option>
+                  ))}
+                </select>
+              </label>
+              <label className="field">
+                <span>Phone <span className="pool-required" aria-hidden="true">*</span></span>
+                <input required type="tel" autoComplete="tel" maxLength={32}
+                  placeholder="Phone number" value={form.phone}
+                  onChange={(event) => updateForm({ ...form, phone: event.target.value })} />
+              </label>
+              <label className="field pool-span-full">
+                Skills
+                <textarea maxLength={1000} placeholder="e.g. C#, ASP.NET Core, SQL Server"
+                  value={form.skills} onChange={(event) => updateForm({ ...form, skills: event.target.value })} />
+              </label>
+              <label className="field">
+                <span>Source <span className="pool-required" aria-hidden="true">*</span></span>
+                <select required value={form.source}
+                  onChange={(event) => updateForm({ ...form, source: event.target.value })}>
+                  <option>Referral</option><option>LinkedIn</option><option>Career site</option><option>Agency</option>
+                </select>
+              </label>
+              <label className="field">
+                Consent date (optional)
+                <input type="date" value={consentDate} onChange={(event) => setConsentDate(event.target.value)} />
+              </label>
+              <label className="field pool-span-full pool-upload">
+                <span>PDF resume <span className="pool-required" aria-hidden="true">*</span></span>
+                <input type="file" required accept=".pdf,application/pdf" onChange={(event) => {
+                  const file = event.target.files?.[0] ?? null
+                  const fileError = file ? getResumeError(file) : ''
+                  setResumeFile(fileError ? null : file)
+                  if (fileError) { showFormError(fileError); event.target.value = '' }
+                  else setFormError('')
+                }} />
+                <span className="pool-hint">{resumeFile
+                  ? `${resumeFile.name} · ${(resumeFile.size / (1024 * 1024)).toFixed(2)} MB`
+                  : 'Choose a PDF up to 5 MB.'}</span>
+              </label>
+            </fieldset>
+          </form>
+          {matches.length > 0 && (
+            <section className="pool-matches" aria-label="Possible duplicate candidates">
+              <h3>Existing candidates</h3>
+              <p>Check these records before creating a new candidate.</p>
+              {candidateTable(matches)}
+            </section>
+          )}
+        </div>
+      </PoolModal>
+
+      <PoolModal open={!!selectedCandidate} title="Add to requisition"
+        subtitle="Choose a published job for this candidate."
+        busy={applicationPending} onClose={closeApplicationDialog}
+        footer={
+          <>
+            <Button onClick={closeApplicationDialog} disabled={applicationPending}>Cancel</Button>
+            <Button variant="primary" onClick={() => void submitApplication()}
+              disabled={applicationPending || !selectedRequisitionId || requisitionsLoading ||
+                !!requisitionsError || publishedRequisitions.length === 0}>
+              {applicationPending && <span className="pool-spinner" aria-hidden="true" />}
+              {applicationPending ? 'Adding...' : 'Add to requisition'}
+            </Button>
+          </>
+        }>
+        <PoolToast toast={toast} onDismiss={dismissToast} />
+        {selectedCandidate && (
           <div className="stack">
-            <p>
-              Add <strong>{selectedCandidate.fullName}</strong> to a published requisition.
-            </p>
+            <div className="pool-notice">Candidate: <strong>{selectedCandidate.fullName}</strong></div>
             {requisitionsLoading ? (
-              <div className="empty-state" role="status">Loading requisitions…</div>
+              <div className="pool-loading" role="status"><span className="pool-spinner" aria-hidden="true" /> Loading requisitions...</div>
             ) : requisitionsError ? (
-              <div className="panel">
-                <p className="error" role="alert">{requisitionsError}</p>
-                <Button
-                  variant="primary"
-                  onClick={() => setRequisitionsRetry((attempt) => attempt + 1)}
-                  disabled={requisitionsLoading}
-                >
-                  Retry
-                </Button>
+              <div className="stack">
+                <p className="pool-notice pool-notice--error" role="alert">{requisitionsError}</p>
+                <div><Button onClick={() => setRequisitionsRetry((attempt) => attempt + 1)}>Try again</Button></div>
               </div>
-            ) : requisitions.length === 0 ? (
-              <EmptyState
-                title="No accessible requisitions"
-                message="The requisitions API returned no requisitions available to your account."
-              />
             ) : publishedRequisitions.length === 0 ? (
-              <EmptyState
-                title="No published requisitions"
-                message="You have accessible requisitions, but none are currently published. Only published requisitions can receive applications."
-              />
+              <EmptyState title="No published requisitions"
+                message="A published requisition that you can access is needed to add an application." />
             ) : (
-              <>
-                <p className="muted">
-                  {publishedRequisitions.length} published requisition
-                  {publishedRequisitions.length === 1 ? '' : 's'} available.
-                </p>
-                <label className="field">
-                  Published requisition
-                  <select
-                    value={selectedRequisitionId}
-                    onChange={(event) => {
-                      setSelectedRequisitionId(event.target.value)
-                      setApplicationError(null)
-                    }}
-                    disabled={applicationPending}
-                    required
-                  >
-                    <option value="">Select a requisition</option>
-                    {publishedRequisitions.map((requisition) => (
-                      <option key={requisition.requisitionId} value={requisition.requisitionId}>
-                        {requisition.title} — {requisition.department}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              </>
+              <label className="field">
+                Published requisition
+                <select data-autofocus value={selectedRequisitionId} required disabled={applicationPending}
+                  onChange={(event) => { setSelectedRequisitionId(event.target.value); setApplicationError(null) }}>
+                  <option value="">Select a requisition</option>
+                  {publishedRequisitions.map((requisition) => (
+                    <option key={requisition.requisitionId} value={requisition.requisitionId}>
+                      {requisition.title} — {requisition.department}
+                    </option>
+                  ))}
+                </select>
+              </label>
             )}
             <label className="field">
               Application source (optional)
-              <input
-                value={applicationSource}
-                onChange={(event) => setApplicationSource(event.target.value)}
-                disabled={applicationPending}
-              />
+              <input value={applicationSource} disabled={applicationPending} maxLength={100}
+                placeholder="e.g. Referral"
+                onChange={(event) => setApplicationSource(event.target.value)} />
             </label>
-            {applicationError ? <p className="error" role="alert">{applicationError}</p> : null}
+            {applicationError && <p className="pool-notice pool-notice--error" role="alert">{applicationError}</p>}
           </div>
-        ) : null}
-      </Modal>
+        )}
+      </PoolModal>
     </div>
   )
 }
