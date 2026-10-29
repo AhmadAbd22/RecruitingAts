@@ -207,7 +207,7 @@ export function TalentPoolPage() {
           ? `${getDuplicateMessage(response.data)} Review the matches, then use an existing candidate or save a separate profile.`
           : 'No matching candidates were found. Creation will check again.'
       setFormMessage(message)
-      notify(message, response.data.isDuplicate ? 'info' : 'success')
+      notify(message, response.data.isHardDuplicate ? 'error' : response.data.isDuplicate ? 'info' : 'success')
     } catch (cause) {
       showFormError(getApiError(cause))
     } finally {
@@ -464,7 +464,12 @@ export function TalentPoolPage() {
         <PoolToast toast={toast} onDismiss={dismissToast} />
         <div className="stack">
           {formError && <div className="pool-notice pool-notice--error" role="alert">{formError}</div>}
-          {formMessage && <div className={`pool-notice ${matches.length ? '' : 'pool-notice--success'}`}>{formMessage}</div>}
+          {formMessage && (
+            <div className={`pool-notice ${duplicateResult?.isHardDuplicate ? 'pool-notice--error' : matches.length ? '' : 'pool-notice--success'}`}
+              role={duplicateResult?.isHardDuplicate ? 'alert' : 'status'}>
+              {formMessage}
+            </div>
+          )}
           <form id="pool-candidate-form" className="stack" noValidate onSubmit={(event) => {
             event.preventDefault()
             const email = event.currentTarget.elements.namedItem('email')
