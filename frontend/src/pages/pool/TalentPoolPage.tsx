@@ -7,8 +7,6 @@ import {
   createApplication,
   getRequisitions,
   Permissions,
-  searchApplicationCandidates,
-  searchCandidates,
 } from '../../api/client'
 
 import { usePermission } from '../../auth/usePermission'
@@ -29,6 +27,7 @@ import {
 import {
   getApiError,
   getResumeError,
+  normalizeCandidatePhone,
   phoneCountries,
 } from './candidatePageHelpers'
 
@@ -76,11 +75,13 @@ export function TalentPoolPage() {
   const [phoneCountry, setPhoneCountry] = useState('')
   const [consentDate, setConsentDate] = useState('')
   const [resumeFile, setResumeFile] = useState<File | null>(null)
+  const [candidateAwaitingResume, setCandidateAwaitingResume] = useState<CandidateDetail | null>(null)
+  const createSubmitLock = useRef(false)
 
   const [matches, setMatches] = useState<CandidateListItem[]>([])
   const [formError, setFormError] = useState('')
   const [formMessage, setFormMessage] = useState('')
-  const [pendingAction, setPendingAction] = useState<'duplicates' | 'create' | null>(null)
+  const [pendingAction, setPendingAction] = useState<'duplicates' | 'create' | 'upload' | null>(null)
   const busy = pendingAction !== null
 
   // Add to requisition state
@@ -99,7 +100,7 @@ export function TalentPoolPage() {
 
   // Permission-aware candidate search (single effect)
   useEffect(() => {
-    let cancelled = false
+    const controller = new AbortController()
 
     if (!canSearchCandidates) {
       setCandidates([])
@@ -115,12 +116,13 @@ export function TalentPoolPage() {
       setSearchForbidden(false)
 
       try {
-        const results = canViewPool
-          ? await searchCandidates(q.trim())
-          : await searchApplicationCandidates(q.trim())
-        if (!cancelled) setCandidates(results)
+        const { data } = await api.get<CandidateListItem[]>(
+          canViewPool ? '/candidates' : '/applications/candidates',
+          { params: { q: q.trim() }, signal: controller.signal },
+        )
+        if (!controller.signal.aborted) setCandidates(data)
       } catch (cause) {
-        if (cancelled) return
+        if (controller.signal.aborted) return
         const forbidden =
           axios.isAxiosError(cause) && cause.response?.status === 403
         setSearchForbidden(forbidden)
@@ -134,12 +136,12 @@ export function TalentPoolPage() {
               : 'We couldn’t load candidates. Please try again.',
         )
       } finally {
-        if (!cancelled) setLoading(false)
+        if (!controller.signal.aborted) setLoading(false)
       }
     }, 300)
 
     return () => {
-      cancelled = true
+      controller.abort()
       window.clearTimeout(timer)
     }
   }, [canSearchCandidates, canViewPool, q, retryAttempt, usesScopedCandidateSearch])
@@ -179,10 +181,15 @@ export function TalentPoolPage() {
   // Add candidate handlers
   function openCreateForm() {
     dismissToast()
+    if (candidateAwaitingResume) {
+      setOpen(true)
+      return
+    }
     setForm(emptyForm)
     setPhoneCountry('')
     setConsentDate('')
     setResumeFile(null)
+    setCandidateAwaitingResume(null)
     setMatches([])
     setFormError('')
     setFormMessage('')
@@ -209,12 +216,18 @@ export function TalentPoolPage() {
   }
 
   async function checkDuplicates() {
-    if (busy || !canManage) {
+    if (busy || candidateAwaitingResume || !canManage) {
       return
     }
 
     if (!form.email.trim() && !form.phone.trim()) {
       showFormError('Enter an email address or phone number first.')
+      return
+    }
+
+    const phone = form.phone.trim() ? normalizeCandidatePhone(form.phone, phoneCountry) : null
+    if (form.phone.trim() && !phone) {
+      showFormError('Enter a valid international phone number, or select the country for a local number.')
       return
     }
 
@@ -227,8 +240,7 @@ export function TalentPoolPage() {
       const response = await api.get<DuplicateResult>('/candidates/duplicates', {
         params: {
           Email: form.email.trim() || undefined,
-          Phone: form.phone.trim() || undefined,
-          PhoneCountry: phoneCountry || undefined,
+          Phone: phone || '',
         },
       })
 
@@ -247,7 +259,7 @@ export function TalentPoolPage() {
   }
 
   async function createCandidate() {
-    if (busy || !canManage) {
+    if (busy || createSubmitLock.current || !canManage) {
       return
     }
 
@@ -276,42 +288,46 @@ export function TalentPoolPage() {
       return
     }
 
-    const digits = form.phone.trim().replace(/\D/g, '')
-    const callingCode = phoneCountries.find((c) => c.code === phoneCountry)?.callingCode
-    const phoneValue =
-      callingCode && digits
-        ? `+${callingCode}${digits.replace(new RegExp(`^${callingCode}`), '')}`
-        : form.phone.trim()
-    const body = new FormData()
-
-    body.append('FullName', form.fullName.trim())
-    body.append('Email', form.email.trim())
-    body.append('Phone', phoneValue)
-    body.append('Skills', form.skills.trim())
-    body.append('Source', form.source.trim())
-    body.append('PhoneCountry', phoneCountry)
-    if (consentDate) {
-      body.append('ConsentDate', consentDate)
+    const phone = normalizeCandidatePhone(form.phone, phoneCountry)
+    if (!phone) {
+      showFormError('Enter a valid international phone number, or select the country for a local number.')
+      return
     }
-    body.append('file', resumeFile)
 
+    createSubmitLock.current = true
     setPendingAction('create')
     setMatches([])
+    let created = candidateAwaitingResume
 
     try {
-      const createResponse = await api.post<CandidateDetail>(
-        '/candidates',
-        body,
-        { params: { confirmDuplicate: matches.length > 0 } },
-      )
+      if (!created) {
+        const { data } = await api.post<CandidateDetail>('/candidates', {
+          fullName: form.fullName.trim(),
+          email: form.email.trim(),
+          phone,
+          skills: form.skills.trim() || null,
+          source: form.source.trim(),
+          consentDate: consentDate || null,
+        })
+        created = data
+        setCandidateAwaitingResume(data)
+      }
 
-      const created = createResponse.data
+      // Retry only this step if JSON creation succeeded but the upload failed.
+      setPendingAction('upload')
+      const body = new FormData()
+      body.append('file', resumeFile)
+      const { data: uploaded } = await api.post<CandidateDetail>(
+        `/candidates/${created.candidateId}/resume`, body,
+      )
+      created = uploaded
 
       setOpen(false)
       setForm(emptyForm)
       setPhoneCountry('')
       setConsentDate('')
       setResumeFile(null)
+      setCandidateAwaitingResume(null)
       setMatches([])
       setFormError('')
       setFormMessage('')
@@ -340,12 +356,17 @@ export function TalentPoolPage() {
 
       notify('Candidate created successfully.')
     } catch (cause) {
+      if (created) {
+        showFormError(`Candidate saved, but the resume upload failed. ${getApiError(cause)} Select Retry resume upload to attach it to the same candidate.`)
+        return
+      }
       if (axios.isAxiosError<ApiFailure>(cause)) {
         setMatches(cause.response?.data?.duplicate?.matches ?? [])
       }
 
       showFormError(getApiError(cause))
     } finally {
+      createSubmitLock.current = false
       setPendingAction(null)
     }
   }
@@ -515,13 +536,14 @@ export function TalentPoolPage() {
         footer={
           <>
             <Button disabled={busy} onClick={closeCreateForm}>Cancel</Button>
-            <Button disabled={busy} onClick={() => void checkDuplicates()}>
+            <Button disabled={busy || !!candidateAwaitingResume} onClick={() => void checkDuplicates()}>
               {pendingAction === 'duplicates' && <span className="pool-spinner" aria-hidden="true" />}
               {pendingAction === 'duplicates' ? 'Checking...' : 'Check duplicates'}
             </Button>
             <Button variant="primary" type="submit" form="pool-candidate-form" disabled={busy}>
-              {pendingAction === 'create' && <span className="pool-spinner" aria-hidden="true" />}
-              {pendingAction === 'create' ? 'Saving...' : 'Save candidate'}
+              {(pendingAction === 'create' || pendingAction === 'upload') && <span className="pool-spinner" aria-hidden="true" />}
+              {pendingAction === 'create' ? 'Saving...' : pendingAction === 'upload' ? 'Uploading PDF...'
+                : candidateAwaitingResume ? 'Retry resume upload' : 'Save candidate'}
             </Button>
           </>
         }>
@@ -529,7 +551,7 @@ export function TalentPoolPage() {
         <div className="stack">
           {formError && <div className="pool-notice pool-notice--error" role="alert">{formError}</div>}
           {formMessage && <div className={`pool-notice ${matches.length ? '' : 'pool-notice--success'}`}>{formMessage}</div>}
-          <form id="pool-candidate-form" noValidate onSubmit={(event) => {
+          <form id="pool-candidate-form" className="stack" noValidate onSubmit={(event) => {
             event.preventDefault()
             const email = event.currentTarget.elements.namedItem('email')
             if (email instanceof HTMLInputElement && email.validity.typeMismatch) {
@@ -539,7 +561,7 @@ export function TalentPoolPage() {
             }
             void createCandidate()
           }}>
-            <fieldset disabled={busy} className="pool-fieldset pool-form-grid">
+            <fieldset disabled={busy || !!candidateAwaitingResume} className="pool-fieldset pool-form-grid">
               <label className="field">
                 <span>Full name <span className="pool-required" aria-hidden="true">*</span></span>
                 <input data-autofocus required autoComplete="name" maxLength={200}
@@ -588,9 +610,10 @@ export function TalentPoolPage() {
                 Consent date (optional)
                 <input type="date" value={consentDate} onChange={(event) => setConsentDate(event.target.value)} />
               </label>
+            </fieldset>
               <label className="field pool-span-full pool-upload">
                 <span>PDF resume <span className="pool-required" aria-hidden="true">*</span></span>
-                <input type="file" required accept=".pdf,application/pdf" onChange={(event) => {
+                <input type="file" required disabled={busy} accept=".pdf,application/pdf" onChange={(event) => {
                   const file = event.target.files?.[0] ?? null
                   const fileError = file ? getResumeError(file) : ''
                   setResumeFile(fileError ? null : file)
@@ -601,7 +624,6 @@ export function TalentPoolPage() {
                   ? `${resumeFile.name} · ${(resumeFile.size / (1024 * 1024)).toFixed(2)} MB`
                   : 'Choose a PDF up to 5 MB.'}</span>
               </label>
-            </fieldset>
           </form>
           {matches.length > 0 && (
             <section className="pool-matches" aria-label="Possible duplicate candidates">

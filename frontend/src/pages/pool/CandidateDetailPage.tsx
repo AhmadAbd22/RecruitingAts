@@ -3,7 +3,7 @@ import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { api, Permissions } from '../../api/client'
 import { usePermission } from '../../auth/usePermission'
 import { Button, PageHeader } from '../../components/shared'
-import { getApiError, getResumeError } from './candidatePageHelpers'
+import { getApiError, getResumeDownloadError, getResumeError } from './candidatePageHelpers'
 import type { CandidateDetail } from './candidatePageHelpers'
 import { PoolToast } from './PoolToast'
 import { usePoolToast } from './usePoolToast'
@@ -72,12 +72,20 @@ export function CandidateDetailPage() {
     setActionError('')
 
     try {
-      const { data } = await api.get<Blob>(`/candidates/${targetId}/resume`, {
+      const response = await api.get<Blob>(`/candidates/${targetId}/resume`, {
         responseType: 'blob',
+        validateStatus: () => true,
       })
+      const downloadError = await getResumeDownloadError(response)
       if (activeId.current !== targetId) return
 
-      const fileUrl = URL.createObjectURL(data)
+      if (downloadError) {
+        setActionError(downloadError)
+        notify(downloadError, 'error')
+        return
+      }
+
+      const fileUrl = URL.createObjectURL(response.data)
       const link = document.createElement('a')
       link.href = fileUrl
       link.download = downloadName

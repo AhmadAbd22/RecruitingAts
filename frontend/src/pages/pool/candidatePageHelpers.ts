@@ -1,6 +1,7 @@
 import axios, { HttpStatusCode } from "axios";
+import type { AxiosResponse } from "axios";
 
-import { getCountries, getCountryCallingCode } from "react-phone-number-input";
+import { getCountries, getCountryCallingCode, parsePhoneNumber } from "react-phone-number-input";
 
 import countryNames from "react-phone-number-input/locale/en";
 
@@ -36,19 +37,21 @@ export function getApiError(error: unknown): string {
     return "Unable to contact the server. Please try again.";
   }
 
-  if (error.response.status === HttpStatusCode.Unauthorized) {
+  return getResponseError(error.response.status, error.response.data);
+}
+
+function getResponseError(status: number, body?: ApiFailure, fallback = "The request could not be completed."): string {
+  if (status === HttpStatusCode.Unauthorized) {
     return "Your session has expired. Please sign in again.";
   }
 
-  if (error.response.status === HttpStatusCode.Forbidden) {
+  if (status === HttpStatusCode.Forbidden) {
     return "You do not have permission to perform this action.";
   }
 
-  if (error.response.status === HttpStatusCode.NotFound) {
-    return "The requested candidate or resume was not found.";
+  if (status === HttpStatusCode.NotFound) {
+    return body?.message || "The requested candidate or resume was not found.";
   }
-
-  const body = error.response.data;
 
   const validationMessages = Object.values(body?.errors ?? {})
     .flat()
@@ -58,8 +61,33 @@ export function getApiError(error: unknown): string {
     validationMessages ||
     body?.message ||
     body?.title ||
-    "The request could not be completed."
+    fallback
   );
+}
+
+export async function getResumeDownloadError(response: AxiosResponse<Blob>): Promise<string | null> {
+  const contentType = String(response.headers["content-type"] ?? "")
+    .split(";")[0].trim().toLowerCase();
+  const file = response.data;
+
+  if (response.status === HttpStatusCode.Ok && contentType === "application/pdf"
+      && file.size > 0 && await file.slice(0, 5).text() === "%PDF-") {
+    return null;
+  }
+
+  let body: ApiFailure | undefined;
+  try {
+    body = JSON.parse(await file.text()) as ApiFailure;
+  } catch {
+    // HTML, empty responses and invalid files are not downloadable PDFs.
+  }
+  return getResponseError(response.status, body, "The server did not return a valid PDF. Please try again.");
+}
+
+export function normalizeCandidatePhone(phone: string, countryCode: string): string | null {
+  const country = phoneCountries.find((item) => item.code === countryCode);
+  const number = parsePhoneNumber(phone.trim().replace(/^00/, "+"), country?.code);
+  return number?.isValid() ? number.number : null;
 }
 
 export function getResumeError(file: File): string {
