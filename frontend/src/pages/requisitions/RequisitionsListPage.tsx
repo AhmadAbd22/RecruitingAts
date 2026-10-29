@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import axios from 'axios'
-import { getRequisitions, Permissions } from '../../api/client'
+import { createRequisition, getRequisitions, Permissions } from '../../api/client'
 import { usePermission } from '../../auth/usePermission'
 import { RequisitionForm, RequisitionList } from '../../components/requisitions'
 import type { RequisitionFormValues } from '../../components/requisitions'
@@ -26,7 +26,10 @@ export function RequisitionsListPage() {
     skills: '',
     jobDescription: '',
     openings: 1,
+    hiringManagerEmployeeId: '',
   })
+  const [createError, setCreateError] = useState<string | null>(null)
+  const [createPending, setCreatePending] = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -97,16 +100,54 @@ export function RequisitionsListPage() {
       <Modal
         open={open}
         title="Create requisition"
-        onClose={() => setOpen(false)}
+        onClose={() => {
+          if (!createPending) {
+            setOpen(false)
+            setCreateError(null)
+          }
+        }}
         footer={null}
       >
         <RequisitionForm
           values={form}
           onChange={setForm}
           submitLabel="Create draft"
-          onSubmit={() => {
-            // TODO: POST then navigate
-            setOpen(false)
+          disabled={createPending}
+          error={createError}
+          onSubmit={async () => {
+            if (createPending) return
+
+            setCreateError(null)
+            setCreatePending(true)
+
+            try {
+              await createRequisition({
+                title: form.title.trim(),
+                department: form.department.trim(),
+                employmentType: form.employmentType,
+                seniority: form.seniority,
+                skills: form.skills.trim(),
+                jobDescription: form.jobDescription.trim(),
+                openings: form.openings,
+                hiringManagerEmployeeId: form.hiringManagerEmployeeId.trim(),
+              })
+              setOpen(false)
+              setCreateError(null)
+              setRetryAttempt((attempt) => attempt + 1)
+            } catch (cause) {
+              if (axios.isAxiosError<{ message?: string }>(cause)) {
+                setCreateError(
+                  cause.response?.data?.message ??
+                    'Unable to create the requisition. Please review the form and try again.',
+                )
+              } else if (cause instanceof Error) {
+                setCreateError(cause.message)
+              } else {
+                setCreateError('Unable to create the requisition. Please try again.')
+              }
+            } finally {
+              setCreatePending(false)
+            }
           }}
         />
       </Modal>

@@ -2,6 +2,8 @@ import axios from 'axios'
 import type {
   ApplicationPipelineItemDto,
   CandidateListItem,
+  CreateRequisitionRequest,
+  CreateRequisitionResponse,
   CreateApplicationRequest,
   CreateApplicationResponse,
   PipelineStage,
@@ -98,6 +100,11 @@ export async function searchApplicationCandidates(query: string) {
 
 export async function getRequisitions() {
   const { data } = await api.get<RequisitionListItem[]>('/requisitions')
+  return data
+}
+
+export async function createRequisition(request: CreateRequisitionRequest) {
+  const { data } = await api.post<CreateRequisitionResponse>('/requisitions', request)
   return data
 }
 

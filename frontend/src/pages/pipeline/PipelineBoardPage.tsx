@@ -123,6 +123,7 @@ export function PipelineBoardPage() {
       applicationId: application.applicationId,
       candidateId: application.candidateId,
       candidateName: application.candidateName,
+      candidateEmail: application.candidateEmail,
       requisitionId: application.requisitionId,
       requisitionTitle: application.requisitionTitle,
       pipelineStageId: application.pipelineStageId,
@@ -242,8 +243,8 @@ export function PipelineBoardPage() {
       )}
       <StageMoveDrawer
         open={!!selectedApplication}
-        applicationId={selectedId}
         candidateName={selectedApplication?.candidateName ?? 'Update application stage'}
+        candidateEmail={selectedApplication?.candidateEmail}
         currentStageId={selectedApplication?.pipelineStageId}
         currentStageIsTerminal={currentStageIsTerminal}
         stages={pipelineStages}
