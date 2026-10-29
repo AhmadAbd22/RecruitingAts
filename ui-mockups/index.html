@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Recruiting ATS — UI Mockups</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;600;700&family=Syne:wght@700;800&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --ink: #0e1a2b;
+      --paper: #eef2f6;
+      --surface: #fff;
+      --line: #d5dee8;
+      --muted: #5b6b7c;
+      --accent: #0f8b7a;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: Figtree, system-ui, sans-serif;
+      color: var(--ink);
+      background:
+        radial-gradient(900px 420px at 10% -10%, rgba(15, 139, 122, 0.14), transparent 55%),
+        radial-gradient(700px 380px at 100% 0%, rgba(37, 99, 235, 0.08), transparent 50%),
+        var(--paper);
+      padding: 3rem 1.5rem 4rem;
+    }
+    main { max-width: 40rem; margin: 0 auto; }
+    .brand {
+      font-family: Syne, system-ui, sans-serif;
+      font-weight: 800;
+      font-size: clamp(2rem, 5vw, 2.75rem);
+      letter-spacing: -0.04em;
+      margin: 0 0 0.5rem;
+      line-height: 1.05;
+    }
+    .brand em { font-style: normal; color: var(--accent); }
+    .lead { color: var(--muted); margin: 0 0 2rem; font-size: 1.05rem; max-width: 34rem; }
+    a.card {
+      display: block;
+      text-decoration: none;
+      color: inherit;
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 1.15rem 1.25rem;
+      margin-bottom: 0.75rem;
+      transition: border-color 140ms ease, transform 140ms ease;
+    }
+    a.card:hover { border-color: var(--accent); transform: translateY(-1px); }
+    a.card h2 { margin: 0 0 0.35rem; font-size: 1.1rem; font-family: Syne, sans-serif; letter-spacing: -0.02em; }
+    a.card p { margin: 0; color: var(--muted); font-size: 0.92rem; }
+    .meta { margin-top: 2rem; font-size: 0.85rem; color: var(--muted); }
+    .meta a { color: var(--accent); }
+  </style>
+</head>
+<body>
+  <main>
+    <h1 class="brand">Recruiting <em>ATS</em></h1>
+    <p class="lead">Local UI mockups. Prefer the full demo for the Day‑5 walkthrough — nothing here is committed unless you choose to.</p>
+
+    <a class="card" href="./demo/index.html">
+      <h2>Full interactive demo</h2>
+      <p>Login personas, requisitions workflow, talent pool + duplicates, pipeline + disposition, interviews + feedback independence, compensation audit.</p>
+    </a>
+
+    <a class="card" href="./pipeline-board.html">
+      <h2>Pipeline board only</h2>
+      <p>Earlier single-screen kanban mock for applications API shapes.</p>
+    </a>
+
+    <p class="meta">Design tokens: <a href="./DESIGN.md">DESIGN.md</a> · Missing APIs: <a href="./API_GAPS.md">API_GAPS.md</a></p>
+  </main>
+</body>
+</html>
