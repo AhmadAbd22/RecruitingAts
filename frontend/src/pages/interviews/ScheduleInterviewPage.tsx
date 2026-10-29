@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from 'react'
+import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
 import { api, Permissions } from '../../api/client'
 import { useAuth } from '../../auth/AuthContext'
@@ -8,6 +8,7 @@ import type { PanelCandidate } from '../../components/interviews'
 import { Button, EmptyState, PageHeader } from '../../components/shared'
 import type { ApplicationPipelineItemDto, TeamMember } from '../../types/domain'
 import { getInterviewError } from './interviewHelpers'
+import './interviews.css'
 
 export function ScheduleInterviewPage() {
   const { user } = useAuth()
@@ -28,6 +29,11 @@ export function ScheduleInterviewPage() {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [message, setMessage] = useState('')
+  const noticeRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (error || message) noticeRef.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+  }, [error, message])
 
   const application = applications.find((item) => item.applicationId === applicationId)
   const requisitionId = application?.requisitionId
@@ -92,7 +98,7 @@ export function ScheduleInterviewPage() {
           .map((member) => ({
             employeeId: member.employeeId,
             name: member.employeeName,
-            teamRole: member.teamRole,
+            teamRole: member.teamRole === 'TechnicalInterviewer' ? 'Technical interviewer' : 'Final interviewer',
           }))
 
         if (!controller.signal.aborted) {
@@ -165,88 +171,133 @@ export function ScheduleInterviewPage() {
 
   if (!canSchedule) {
     return (
-      <div className="page">
+      <div className="page interviews-page">
         <PageHeader title="Schedule interview" />
-        <p className="error" role="alert">You do not have permission to schedule interviews.</p>
+        <div className="interview-notice interview-notice--error" role="alert">
+          <strong>Scheduling is not available for this account</strong>
+          <p>You do not have permission to schedule interviews.</p>
+        </div>
+        <Link className="btn btn-ghost interview-back-link" to="/interviews">Back to my interviews</Link>
       </div>
     )
   }
 
   return (
-    <div className="page">
+    <div className="page interviews-page">
       <PageHeader
         title="Schedule interview"
-        subtitle="Choose an application and its interviewer team."
-        actions={<Link className="btn btn-ghost" to="/interviews">My interviews</Link>}
+        subtitle="Choose the candidate, set the details and select the interview panel."
+        actions={<Link className="btn btn-ghost" to="/interviews">Back to my interviews</Link>}
       />
 
-      {error && <p className="error" role="alert">{error}</p>}
-      {message && <p role="status">{message}</p>}
+      {(error || message) && <div ref={noticeRef}>
+        {error && <div className="interview-notice interview-notice--error" role="alert"><strong>Please check the interview details</strong><p>{error}</p></div>}
+        {message && <div className="interview-notice interview-notice--success" role="status"><strong>Interview scheduled successfully</strong><p>{message}</p></div>}
+      </div>}
 
-      {loading ? <p role="status">Loading applications...</p> : applications.length === 0 ? (
+      {loading ? <div className="interview-loading interview-loading-panel" role="status"><span className="interview-spinner" aria-hidden="true" />Loading applications...</div> : error && applications.length === 0 ? null : applications.length === 0 ? (
         <EmptyState
           title="No applications available"
           message="An application must exist within your access scope before scheduling."
         />
       ) : (
-        <form className="panel stack" onSubmit={scheduleInterview}>
-          <fieldset disabled={saving} className="stack" style={{ border: 0, padding: 0, margin: 0 }}>
-            <label className="field">
-              Application
-              <select required value={applicationId} onChange={(event) => {
-                setApplicationId(event.target.value)
-                setError('')
-                setMessage('')
-              }}>
-                <option value="">Select an application</option>
-                {applications.map((item) => (
-                  <option key={item.applicationId} value={item.applicationId}>
-                    {item.candidateName} - {item.requisitionTitle}
-                  </option>
-                ))}
-              </select>
-            </label>
+        <form className="interview-schedule-layout" onSubmit={scheduleInterview}>
+          <fieldset disabled={saving} className="interview-fieldset interview-form-panel">
+            <legend className="interview-sr-only">Interview schedule</legend>
+            <section className="interview-form-section" aria-labelledby="interview-candidate-title">
+              <div className="interview-section-heading">
+                <span className="interview-step" aria-hidden="true">1</span>
+                <div><h2 id="interview-candidate-title">Candidate and job</h2><p>Choose the application this interview belongs to.</p></div>
+              </div>
+              <label className="field">
+                <span>Application <span className="interview-required" aria-hidden="true">*</span></span>
+                <select required value={applicationId} onChange={(event) => {
+                  setApplicationId(event.target.value)
+                  setError('')
+                  setMessage('')
+                }}>
+                  <option value="">Select a candidate and job</option>
+                  {applications.map((item) => (
+                    <option key={item.applicationId} value={item.applicationId}>
+                      {item.candidateName} - {item.requisitionTitle}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </section>
 
-            <div className="row wrap">
-              <label className="field grow">
-                Type
-                <select value={interviewType} onChange={(event) => setInterviewType(event.target.value)}>
-                  <option>Technical</option>
-                  <option>Panel</option>
-                  <option>Final</option>
-                </select>
-              </label>
-              <label className="field grow">
-                Mode
-                <select value={mode} onChange={(event) => setMode(event.target.value)}>
-                  <option>Video</option>
-                  <option>Onsite</option>
-                  <option>Phone</option>
-                </select>
-              </label>
+            <section className="interview-form-section" aria-labelledby="interview-details-title">
+              <div className="interview-section-heading">
+                <span className="interview-step" aria-hidden="true">2</span>
+                <div><h2 id="interview-details-title">Interview details</h2><p>Set the format and when the interview will take place.</p></div>
+              </div>
+              <div className="interview-fields-grid">
+                <label className="field">
+                  Interview type
+                  <select value={interviewType} onChange={(event) => setInterviewType(event.target.value)}>
+                    <option>Technical</option>
+                    <option>Panel</option>
+                    <option>Final</option>
+                  </select>
+                </label>
+                <label className="field">
+                  Meeting mode
+                  <select value={mode} onChange={(event) => setMode(event.target.value)}>
+                    <option>Video</option>
+                    <option>Onsite</option>
+                    <option>Phone</option>
+                  </select>
+                </label>
+                <label className="field interview-full-width">
+                  <span>Date and time (your local time) <span className="interview-required" aria-hidden="true">*</span></span>
+                  <input required type="datetime-local" value={when}
+                    onChange={(event) => setWhen(event.target.value)} />
+                </label>
+              </div>
+            </section>
+
+            <section className="interview-form-section" aria-labelledby="interview-panel-title">
+              <div className="interview-section-heading">
+                <span className="interview-step" aria-hidden="true">3</span>
+                <div><h2 id="interview-panel-title">Interview panel</h2><p>Select at least one interviewer. You can choose one optional lead.</p></div>
+              </div>
+              {panelLoading ? <p className="interview-loading" role="status"><span className="interview-spinner" aria-hidden="true" />Loading interviewer team...</p> : teamReady ? (
+                members.length === 0 ? (
+                  <EmptyState title="No interviewers on this team" message="Ask the requisition owner to add a technical or final interviewer to the team." />
+                ) : (
+                  <div className="interview-panel-picker">
+                    <div className="interview-panel-heading"><strong>Available interviewers</strong><span className="interview-count">{selected.length} selected</span></div>
+                    <PanelPicker members={members} selectedEmployeeIds={selected}
+                      leadEmployeeId={lead} onToggleMember={toggleMember} onLeadChange={setLead} />
+                  </div>
+                )
+              ) : <div className="interview-panel-placeholder"><strong>Choose a candidate and job first</strong><p>Available interviewers from that job's team will appear here.</p></div>}
+              {lead && <Button className="interview-clear-lead" onClick={() => setLead(null)}>Clear lead</Button>}
+            </section>
+
+            <div className="interview-form-footer">
+              <p className="interview-hint">Assigned panel members will see the interview in My interviews.</p>
+              <Button type="submit" variant="primary"
+                disabled={saving || panelLoading || !teamReady || selected.length === 0}>
+                {saving && <span className="interview-spinner" aria-hidden="true" />}
+                {saving ? 'Scheduling...' : 'Schedule interview'}
+              </Button>
             </div>
-
-            <label className="field">
-              Date and time (your local time)
-              <input required type="datetime-local" value={when}
-                onChange={(event) => setWhen(event.target.value)} />
-            </label>
-
-            <h3>Panel</h3>
-            <p className="muted">Select at least one interviewer. A lead is optional.</p>
-
-            {panelLoading ? <p role="status">Loading interviewer team...</p> : teamReady ? (
-              <PanelPicker members={members} selectedEmployeeIds={selected}
-                leadEmployeeId={lead} onToggleMember={toggleMember} onLeadChange={setLead} />
-            ) : <p className="muted">Select an application to load its interviewer team.</p>}
-
-            {lead && <Button onClick={() => setLead(null)}>Clear lead</Button>}
-
-            <Button type="submit" variant="primary"
-              disabled={saving || panelLoading || !teamReady || selected.length === 0}>
-              {saving ? 'Scheduling...' : 'Schedule interview'}
-            </Button>
           </fieldset>
+
+          <aside className="interview-summary" aria-label="Interview summary">
+            <span className="interview-eyebrow">At a glance</span>
+            <h2>Interview summary</h2>
+            <p className="interview-hint">Your selections appear here as you fill in the form.</p>
+            <dl>
+              <div><dt>Candidate</dt><dd>{application?.candidateName || 'No candidate selected'}</dd></div>
+              <div><dt>Job opening</dt><dd>{application?.requisitionTitle || 'No job selected'}</dd></div>
+              <div><dt>Format</dt><dd>{interviewType} / {mode}</dd></div>
+              <div><dt>Date and time (local)</dt><dd>{when ? new Date(when).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' }) : 'Choose a date and time'}</dd></div>
+              <div><dt>Panel</dt><dd>{selected.length ? `${selected.length} interviewer${selected.length === 1 ? '' : 's'} selected` : 'No interviewers selected'}</dd></div>
+              <div><dt>Lead interviewer</dt><dd>{members.find((member) => member.employeeId === lead)?.name || 'Not selected (optional)'}</dd></div>
+            </dl>
+          </aside>
         </form>
       )}
     </div>
