@@ -37,7 +37,8 @@ export function StageColumn({
             <ApplicationCard
               key={a.applicationId}
               applicationId={a.applicationId}
-              candidateName={a.candidateName || a.candidateId}
+              candidateName={a.candidateName || 'Candidate'}
+              candidateEmail={a.candidateEmail}
               requisitionTitle={a.requisitionTitle}
               source={a.source}
               matchScore={a.matchScore}

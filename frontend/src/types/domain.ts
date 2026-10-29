@@ -35,6 +35,21 @@ export type RequisitionListItem = {
   budgetMax?: number | null
 }
 
+export type CreateRequisitionRequest = {
+  title: string
+  department: string
+  employmentType: string
+  seniority: string
+  skills: string
+  jobDescription: string
+  openings: number
+  hiringManagerEmployeeId: string
+}
+
+export type CreateRequisitionResponse = RequisitionListItem & {
+  hiringManagerEmployeeId: string
+}
+
 export type CandidateListItem = {
   candidateId: string
   fullName: string
@@ -48,6 +63,7 @@ export type PipelineApplication = {
   applicationId: string
   candidateId: string
   candidateName?: string
+  candidateEmail?: string
   requisitionId: string
   requisitionTitle: string
   pipelineStageId: string
@@ -62,6 +78,7 @@ export type ApplicationPipelineItemDto = {
   applicationId: string
   candidateId: string
   candidateName: string
+  candidateEmail: string
   requisitionId: string
   requisitionTitle: string
   pipelineStageId: string

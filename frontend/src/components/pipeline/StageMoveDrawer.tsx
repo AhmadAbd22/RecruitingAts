@@ -7,8 +7,8 @@ export type StageMoveOption = {
 
 export type StageMoveDrawerProps = {
   open: boolean
-  applicationId?: string | null
   candidateName?: string
+  candidateEmail?: string
   currentStageId?: string
   currentStageIsTerminal?: boolean
   stages: StageMoveOption[]
@@ -30,8 +30,8 @@ export type StageMoveDrawerProps = {
 /** Owner: Abdul-Manan — FR-APP-005 / FR-APP-006 */
 export function StageMoveDrawer({
   open,
-  applicationId,
   candidateName = 'Candidate',
+  candidateEmail,
   currentStageIsTerminal = false,
   stages,
   dispositionReason,
@@ -52,7 +52,6 @@ export function StageMoveDrawer({
     <Drawer
       open={open}
       title={candidateName}
-      subtitle={applicationId ?? undefined}
       onClose={onClose}
       footer={
         <>
@@ -71,6 +70,9 @@ export function StageMoveDrawer({
         </>
       }
     >
+      <div className="field">
+        <span className="muted">{candidateEmail?.trim() || 'Email unavailable'}</span>
+      </div>
       {stagesLoading ? (
         <div className="empty-state" role="status">Loading active stages…</div>
       ) : stagesError ? (

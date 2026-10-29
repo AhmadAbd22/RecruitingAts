@@ -3,6 +3,7 @@ import { MatchScoreBadge } from './MatchScoreBadge'
 export type ApplicationCardProps = {
   applicationId: string
   candidateName: string
+  candidateEmail?: string
   requisitionTitle: string
   source?: string | null
   matchScore?: number | null
@@ -17,6 +18,7 @@ export type ApplicationCardProps = {
 export function ApplicationCard({
   applicationId,
   candidateName,
+  candidateEmail,
   requisitionTitle,
   source,
   matchScore,
@@ -34,6 +36,7 @@ export function ApplicationCard({
       onClick={() => onSelect?.(applicationId)}
     >
       <strong>{candidateName}</strong>
+      <span className="muted">{candidateEmail?.trim() || 'Email unavailable'}</span>
       <span className="muted">{requisitionTitle}</span>
       <div className="row between">
         <span className="source-tag">{source || '—'}</span>
