@@ -15,8 +15,31 @@ export type CandidateDetail = CandidateListItem & {
 
 export type DuplicateResult = {
   isDuplicate: boolean;
+  isHardDuplicate: boolean;
+  canCreateAnyway: boolean;
+  matchesEmail: boolean;
+  matchesPhone: boolean;
   matches: CandidateListItem[];
 };
+
+export function getMatchedContactFields(result: DuplicateResult): string {
+  if (result.matchesEmail && result.matchesPhone) {
+    return "email address and phone number";
+  }
+  if (result.matchesEmail) return "email address";
+  if (result.matchesPhone) return "phone number";
+  return "contact information";
+}
+
+export function getDuplicateMessage(result: DuplicateResult): string {
+  if (result.isHardDuplicate) {
+    return "This email address and phone number already belong to an existing candidate.";
+  }
+  if (result.matchesEmail && result.matchesPhone) {
+    return "This email address and phone number are already used by existing candidates.";
+  }
+  return `This ${getMatchedContactFields(result)} is already used by another candidate.`;
+}
 
 export type ApiFailure = {
   message?: string;

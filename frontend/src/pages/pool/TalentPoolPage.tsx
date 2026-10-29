@@ -4,8 +4,6 @@ import axios from 'axios'
 
 import {
   api,
-  createApplication,
-  getRequisitions,
   Permissions,
 } from '../../api/client'
 
@@ -14,7 +12,6 @@ import { usePermission } from '../../auth/usePermission'
 import type { CandidateFormValues } from '../../components/candidates'
 import type {
   CandidateListItem,
-  RequisitionListItem,
 } from '../../types/domain'
 
 import {
@@ -26,6 +23,8 @@ import {
 
 import {
   getApiError,
+  getDuplicateMessage,
+  getMatchedContactFields,
   getResumeError,
   normalizeCandidatePhone,
   phoneCountries,
@@ -37,6 +36,7 @@ import type {
   DuplicateResult,
 } from './candidatePageHelpers'
 
+import { CandidateApplicationDialog } from './CandidateApplicationDialog'
 import { PoolModal } from './PoolModal'
 import { PoolToast } from './PoolToast'
 import { usePoolToast } from './usePoolToast'
@@ -76,9 +76,12 @@ export function TalentPoolPage() {
   const [consentDate, setConsentDate] = useState('')
   const [resumeFile, setResumeFile] = useState<File | null>(null)
   const [candidateAwaitingResume, setCandidateAwaitingResume] = useState<CandidateDetail | null>(null)
+  const [candidateSaveNotice, setCandidateSaveNotice] = useState('')
   const createSubmitLock = useRef(false)
 
-  const [matches, setMatches] = useState<CandidateListItem[]>([])
+  const [duplicateResult, setDuplicateResult] = useState<DuplicateResult | null>(null)
+  const matches = duplicateResult?.matches ?? []
+  const [confirmOpen, setConfirmOpen] = useState(false)
   const [formError, setFormError] = useState('')
   const [formMessage, setFormMessage] = useState('')
   const [pendingAction, setPendingAction] = useState<'duplicates' | 'create' | 'upload' | null>(null)
@@ -87,16 +90,6 @@ export function TalentPoolPage() {
   // Add to requisition state
   const [selectedCandidate, setSelectedCandidate] =
     useState<CandidateListItem | null>(null)
-  const [requisitions, setRequisitions] = useState<RequisitionListItem[]>([])
-  const [requisitionsLoading, setRequisitionsLoading] = useState(false)
-  const [requisitionsError, setRequisitionsError] = useState<string | null>(null)
-  const [requisitionsRetry, setRequisitionsRetry] = useState(0)
-  const [selectedRequisitionId, setSelectedRequisitionId] = useState('')
-  const [applicationSource, setApplicationSource] = useState('')
-  const [applicationError, setApplicationError] = useState<string | null>(null)
-  const [applicationPending, setApplicationPending] = useState(false)
-
-  const applicationSubmitLock = useRef(false)
 
   // Permission-aware candidate search (single effect)
   useEffect(() => {
@@ -146,37 +139,6 @@ export function TalentPoolPage() {
     }
   }, [canSearchCandidates, canViewPool, q, retryAttempt, usesScopedCandidateSearch])
 
-  // Requisition loading for the Add to requisition modal
-  useEffect(() => {
-    if (!selectedCandidate) return
-
-    let cancelled = false
-    async function loadRequisitions() {
-      setRequisitionsLoading(true)
-      setRequisitionsError(null)
-
-      try {
-        const results = await getRequisitions()
-        if (!cancelled) setRequisitions(results)
-      } catch (cause) {
-        if (cancelled) return
-        if (axios.isAxiosError<{ message?: string }>(cause)) {
-          setRequisitionsError(cause.response?.data?.message ?? cause.message)
-        } else if (cause instanceof Error) {
-          setRequisitionsError(cause.message)
-        } else {
-          setRequisitionsError('An unexpected error occurred while loading requisitions.')
-        }
-      } finally {
-        if (!cancelled) setRequisitionsLoading(false)
-      }
-    }
-
-    void loadRequisitions()
-    return () => {
-      cancelled = true
-    }
-  }, [selectedCandidate, requisitionsRetry])
 
   // Add candidate handlers
   function openCreateForm() {
@@ -190,7 +152,8 @@ export function TalentPoolPage() {
     setConsentDate('')
     setResumeFile(null)
     setCandidateAwaitingResume(null)
-    setMatches([])
+    setCandidateSaveNotice('')
+    setDuplicateResult(null)
     setFormError('')
     setFormMessage('')
     setOpen(true)
@@ -205,7 +168,7 @@ export function TalentPoolPage() {
 
   function updateForm(values: CandidateFormValues) {
     setForm(values)
-    setMatches([])
+    setDuplicateResult(null)
     setFormError('')
     setFormMessage('')
   }
@@ -234,7 +197,7 @@ export function TalentPoolPage() {
     setPendingAction('duplicates')
     setFormError('')
     setFormMessage('')
-    setMatches([])
+    setDuplicateResult(null)
 
     try {
       const response = await api.get<DuplicateResult>('/candidates/duplicates', {
@@ -244,11 +207,13 @@ export function TalentPoolPage() {
         },
       })
 
-      setMatches(response.data.matches)
+      setDuplicateResult(response.data)
 
-      const message = response.data.isDuplicate
-        ? 'Existing candidates were found. Check the matches below.'
-        : 'No matching candidates were found. Creation will check again.'
+      const message = response.data.isHardDuplicate
+        ? `${getDuplicateMessage(response.data)} Use their existing profile.`
+        : response.data.isDuplicate
+          ? `${getDuplicateMessage(response.data)} Review the matches, then use an existing candidate or save a separate profile.`
+          : 'No matching candidates were found. Creation will check again.'
       setFormMessage(message)
       notify(message, response.data.isDuplicate ? 'info' : 'success')
     } catch (cause) {
@@ -258,7 +223,7 @@ export function TalentPoolPage() {
     }
   }
 
-  async function createCandidate() {
+  async function createCandidate(confirmDuplicate = false) {
     if (busy || createSubmitLock.current || !canManage) {
       return
     }
@@ -296,11 +261,15 @@ export function TalentPoolPage() {
 
     createSubmitLock.current = true
     setPendingAction('create')
-    setMatches([])
+    setDuplicateResult(null)
     let created = candidateAwaitingResume
+    let successMessage = candidateSaveNotice || 'Candidate created successfully.'
 
     try {
       if (!created) {
+        successMessage = confirmDuplicate && duplicateResult
+          ? `Candidate saved with matching ${getMatchedContactFields(duplicateResult)}.`
+          : 'Candidate created successfully.'
         const { data } = await api.post<CandidateDetail>('/candidates', {
           fullName: form.fullName.trim(),
           email: form.email.trim(),
@@ -308,9 +277,10 @@ export function TalentPoolPage() {
           skills: form.skills.trim() || null,
           source: form.source.trim(),
           consentDate: consentDate || null,
-        })
+        }, { params: { confirmDuplicate } })
         created = data
         setCandidateAwaitingResume(data)
+        setCandidateSaveNotice(successMessage)
       }
 
       // Retry only this step if JSON creation succeeded but the upload failed.
@@ -328,12 +298,13 @@ export function TalentPoolPage() {
       setConsentDate('')
       setResumeFile(null)
       setCandidateAwaitingResume(null)
-      setMatches([])
+      setCandidateSaveNotice('')
+      setDuplicateResult(null)
       setFormError('')
       setFormMessage('')
 
       if (canViewPool) {
-        navigate(`/pool/${created.candidateId}`, { state: { poolNotice: 'Candidate created successfully.' } })
+        navigate(`/pool/${created.candidateId}`, { state: { poolNotice: successMessage } })
         return
       }
 
@@ -349,19 +320,19 @@ export function TalentPoolPage() {
           hasResume: created.hasResume,
         })
         notify(
-          `${created.fullName} created. Choose a published requisition to add them.`,
+          `${successMessage} Choose a published requisition to add ${created.fullName}.`,
         )
         return
       }
 
-      notify('Candidate created successfully.')
+      notify(successMessage)
     } catch (cause) {
       if (created) {
         showFormError(`Candidate saved, but the resume upload failed. ${getApiError(cause)} Select Retry resume upload to attach it to the same candidate.`)
         return
       }
       if (axios.isAxiosError<ApiFailure>(cause)) {
-        setMatches(cause.response?.data?.duplicate?.matches ?? [])
+        setDuplicateResult(cause.response?.data?.duplicate ?? null)
       }
 
       showFormError(getApiError(cause))
@@ -371,69 +342,24 @@ export function TalentPoolPage() {
     }
   }
 
-  // Add to requisition handlers
-  function closeApplicationDialog() {
-    if (applicationSubmitLock.current) return
-    dismissToast()
-    setSelectedCandidate(null)
-    setRequisitions([])
-    setRequisitionsError(null)
-    setSelectedRequisitionId('')
-    setApplicationSource('')
-    setApplicationError(null)
-  }
-
-  async function submitApplication() {
-    if (!selectedCandidate || !selectedRequisitionId || applicationSubmitLock.current) return
-
-    applicationSubmitLock.current = true
-    setApplicationPending(true)
-    setApplicationError(null)
-
-    try {
-      const requisition = requisitions.find(
-        (item) => item.requisitionId === selectedRequisitionId,
-      )
-      await createApplication({
-        candidateId: selectedCandidate.candidateId,
-        requisitionId: selectedRequisitionId,
-        source: applicationSource.trim() || null,
-      })
-      notify(
-        `${selectedCandidate.fullName} added to ${requisition?.title ?? 'the requisition'}.`,
-      )
-      setSelectedCandidate(null)
-      setRequisitions([])
-      setSelectedRequisitionId('')
-      setApplicationSource('')
-      setApplicationError(null)
-    } catch (cause) {
-      const message = getApiError(cause)
-      setApplicationError(message)
-      notify(message, 'error')
-    } finally {
-      applicationSubmitLock.current = false
-      setApplicationPending(false)
-    }
-  }
-
-  const publishedRequisitions = requisitions.filter(
-    (requisition) => requisition.status === 'Published',
-  )
-
   function openApplicationDialog(candidate: CandidateListItem) {
     dismissToast()
     setSelectedCandidate(candidate)
-    setRequisitions([])
-    setSelectedRequisitionId('')
-    setApplicationSource('')
-    setApplicationError(null)
   }
 
-  function candidateTable(items: CandidateListItem[], allowApplications = false) {
+  function handleUseExistingCandidate(candidate: CandidateListItem) {
+    if (busy) return
+    setOpen(false)
+    setConfirmOpen(false)
+    dismissToast()
+    if (canViewPool) navigate(`/pool/${candidate.candidateId}`)
+    else if (canManageApplications) openApplicationDialog(candidate)
+  }
+
+  function candidateTable(items: CandidateListItem[], allowApplications = false, useExisting = false) {
     return (
       <DataTable rows={items} rowKey={(candidate) => candidate.candidateId}
-        onRowClick={canViewPool ? (candidate) => navigate(`/pool/${candidate.candidateId}`) : undefined}
+        onRowClick={canViewPool && !busy ? (candidate) => navigate(`/pool/${candidate.candidateId}`) : undefined}
         columns={[
           { key: 'name', header: 'Candidate', render: (candidate) => (
             <div className="pool-name">
@@ -442,7 +368,7 @@ export function TalentPoolPage() {
               </span>
               {canViewPool ? (
                 <Link className="pool-profile-link" to={`/pool/${candidate.candidateId}`}
-                  onClick={(event) => event.stopPropagation()}>{candidate.fullName}</Link>
+                  onClick={(event) => { event.stopPropagation(); if (busy) event.preventDefault() }}>{candidate.fullName}</Link>
               ) : <strong>{candidate.fullName}</strong>}
             </div>
           ) },
@@ -454,6 +380,14 @@ export function TalentPoolPage() {
           { key: 'resume', header: 'Resume', render: (candidate) => candidate.hasResume
             ? <span className="pool-badge pool-badge--ok">PDF attached</span>
             : <span className="pool-hint">Not attached</span> },
+          ...(useExisting && (canViewPool || canManageApplications) ? [{
+            key: 'existing', header: 'Action', render: (candidate: CandidateListItem) => (
+              <Button disabled={busy} onClick={(event) => {
+                event.stopPropagation()
+                handleUseExistingCandidate(candidate)
+              }}>Use existing</Button>
+            ),
+          }] : []),
           ...(allowApplications && canManageApplications ? [{
             key: 'application', header: 'Application', render: (candidate: CandidateListItem) => (
               <Button onClick={(event) => { event.stopPropagation(); openApplicationDialog(candidate) }}>
@@ -540,11 +474,18 @@ export function TalentPoolPage() {
               {pendingAction === 'duplicates' && <span className="pool-spinner" aria-hidden="true" />}
               {pendingAction === 'duplicates' ? 'Checking...' : 'Check duplicates'}
             </Button>
-            <Button variant="primary" type="submit" form="pool-candidate-form" disabled={busy}>
-              {(pendingAction === 'create' || pendingAction === 'upload') && <span className="pool-spinner" aria-hidden="true" />}
-              {pendingAction === 'create' ? 'Saving...' : pendingAction === 'upload' ? 'Uploading PDF...'
-                : candidateAwaitingResume ? 'Retry resume upload' : 'Save candidate'}
-            </Button>
+            {duplicateResult?.canCreateAnyway && !candidateAwaitingResume ? (
+              <Button variant="primary" disabled={busy} onClick={() => setConfirmOpen(true)}>
+                Save with duplicate
+              </Button>
+            ) : (
+              <Button variant="primary" type="submit" form="pool-candidate-form"
+                disabled={busy || !!duplicateResult?.isHardDuplicate}>
+                {(pendingAction === 'create' || pendingAction === 'upload') && <span className="pool-spinner" aria-hidden="true" />}
+                {pendingAction === 'create' ? 'Saving...' : pendingAction === 'upload' ? 'Uploading PDF...'
+                  : candidateAwaitingResume ? 'Retry resume upload' : 'Save candidate'}
+              </Button>
+            )}
           </>
         }>
         <PoolToast toast={toast} onDismiss={dismissToast} />
@@ -578,7 +519,7 @@ export function TalentPoolPage() {
                 Country for a local phone number
                 <select value={phoneCountry} onChange={(event) => {
                   setPhoneCountry(event.target.value)
-                  setMatches([])
+                  setDuplicateResult(null)
                   setFormError('')
                   setFormMessage('')
                 }}>
@@ -629,64 +570,30 @@ export function TalentPoolPage() {
             <section className="pool-matches" aria-label="Possible duplicate candidates">
               <h3>Existing candidates</h3>
               <p>Check these records before creating a new candidate.</p>
-              {candidateTable(matches)}
+              {candidateTable(matches, false, true)}
             </section>
           )}
         </div>
       </PoolModal>
 
-      <PoolModal open={!!selectedCandidate} title="Add to requisition"
-        subtitle="Choose a published job for this candidate."
-        busy={applicationPending} onClose={closeApplicationDialog}
-        footer={
-          <>
-            <Button onClick={closeApplicationDialog} disabled={applicationPending}>Cancel</Button>
-            <Button variant="primary" onClick={() => void submitApplication()}
-              disabled={applicationPending || !selectedRequisitionId || requisitionsLoading ||
-                !!requisitionsError || publishedRequisitions.length === 0}>
-              {applicationPending && <span className="pool-spinner" aria-hidden="true" />}
-              {applicationPending ? 'Adding...' : 'Add to requisition'}
-            </Button>
-          </>
-        }>
-        <PoolToast toast={toast} onDismiss={dismissToast} />
-        {selectedCandidate && (
-          <div className="stack">
-            <div className="pool-notice">Candidate: <strong>{selectedCandidate.fullName}</strong></div>
-            {requisitionsLoading ? (
-              <div className="pool-loading" role="status"><span className="pool-spinner" aria-hidden="true" /> Loading requisitions...</div>
-            ) : requisitionsError ? (
-              <div className="stack">
-                <p className="pool-notice pool-notice--error" role="alert">{requisitionsError}</p>
-                <div><Button onClick={() => setRequisitionsRetry((attempt) => attempt + 1)}>Try again</Button></div>
-              </div>
-            ) : publishedRequisitions.length === 0 ? (
-              <EmptyState title="No published requisitions"
-                message="A published requisition that you can access is needed to add an application." />
-            ) : (
-              <label className="field">
-                Published requisition
-                <select data-autofocus value={selectedRequisitionId} required disabled={applicationPending}
-                  onChange={(event) => { setSelectedRequisitionId(event.target.value); setApplicationError(null) }}>
-                  <option value="">Select a requisition</option>
-                  {publishedRequisitions.map((requisition) => (
-                    <option key={requisition.requisitionId} value={requisition.requisitionId}>
-                      {requisition.title} — {requisition.department}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            )}
-            <label className="field">
-              Application source (optional)
-              <input value={applicationSource} disabled={applicationPending} maxLength={100}
-                placeholder="e.g. Referral"
-                onChange={(event) => setApplicationSource(event.target.value)} />
-            </label>
-            {applicationError && <p className="pool-notice pool-notice--error" role="alert">{applicationError}</p>}
-          </div>
-        )}
+      <PoolModal open={confirmOpen} title="Save with duplicate?"
+        subtitle="Review the matching candidates before continuing."
+        onClose={() => setConfirmOpen(false)}
+        footer={<>
+          <Button onClick={() => setConfirmOpen(false)}>Go back</Button>
+          <Button variant="primary" onClick={() => {
+            setConfirmOpen(false)
+            void createCandidate(true)
+          }}>Confirm save</Button>
+        </>}>
+        <p>{duplicateResult && getDuplicateMessage(duplicateResult)}</p>
+        <p>Do you want to save <strong>{form.fullName || 'this person'}</strong> as a separate candidate?</p>
+        <p className="pool-hint">If this is the same person, go back and choose Use existing.</p>
       </PoolModal>
+
+      <CandidateApplicationDialog candidate={selectedCandidate}
+        onClose={() => setSelectedCandidate(null)}
+        onAdded={(message) => { setSelectedCandidate(null); notify(message) }} />
     </div>
   )
 }

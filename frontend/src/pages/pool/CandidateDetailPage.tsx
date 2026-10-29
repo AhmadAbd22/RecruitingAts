@@ -5,6 +5,7 @@ import { usePermission } from '../../auth/usePermission'
 import { Button, PageHeader } from '../../components/shared'
 import { getApiError, getResumeDownloadError, getResumeError } from './candidatePageHelpers'
 import type { CandidateDetail } from './candidatePageHelpers'
+import { CandidateApplicationDialog } from './CandidateApplicationDialog'
 import { PoolToast } from './PoolToast'
 import { usePoolToast } from './usePoolToast'
 import './pool.css'
@@ -15,9 +16,11 @@ export function CandidateDetailPage() {
   const location = useLocation()
   const canView = usePermission(Permissions.PoolView)
   const canManage = usePermission(Permissions.CandidatesManage)
+  const canManageApplications = usePermission(Permissions.ApplicationsManage)
   const { toast, notify, dismissToast } = usePoolToast()
 
   const [candidate, setCandidate] = useState<CandidateDetail | null>(null)
+  const [applicationCandidate, setApplicationCandidate] = useState<CandidateDetail | null>(null)
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState('')
   const [actionError, setActionError] = useState('')
@@ -43,6 +46,7 @@ export function CandidateDetailPage() {
     const controller = new AbortController()
     setLoading(true)
     setCandidate(null)
+    setApplicationCandidate(null)
     setLoadError('')
     setActionError('')
     setAction(null)
@@ -148,10 +152,18 @@ export function CandidateDetailPage() {
 
   return (
     <div className="page pool-page">
-      <PoolToast toast={toast} onDismiss={dismissToast} />
+      {!applicationCandidate && <PoolToast toast={toast} onDismiss={dismissToast} />}
       <PageHeader title={candidate?.fullName ?? 'Candidate profile'}
         subtitle="Contact information, background and resume."
-        actions={<Button disabled={busy} onClick={() => navigate('/pool')}>← Back to talent pool</Button>} />
+        actions={<>
+          {candidate && canManageApplications && (
+            <Button variant="primary" disabled={busy} onClick={() => {
+              dismissToast()
+              setApplicationCandidate(candidate)
+            }}>Add to requisition</Button>
+          )}
+          <Button disabled={busy} onClick={() => navigate('/pool')}>← Back to talent pool</Button>
+        </>} />
 
       {!canView ? (
         <div className="pool-notice pool-notice--error" role="alert">
@@ -233,6 +245,9 @@ export function CandidateDetailPage() {
           </div>
         </>
       ) : <div className="panel">Candidate not found.</div>}
+      <CandidateApplicationDialog candidate={applicationCandidate}
+        onClose={() => setApplicationCandidate(null)}
+        onAdded={(message) => { setApplicationCandidate(null); notify(message) }} />
     </div>
   )
 }
