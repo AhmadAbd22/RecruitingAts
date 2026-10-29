@@ -123,7 +123,11 @@ public class CandidateService(
 
         return new DuplicateCheckResult(
             matches.Count > 0,
-            matches);
+            matches,
+            matches.Any(c => NormalizeEmail(c.Email) == normalizedEmail
+                && phoneVariants.Contains(c.Phone)),
+            matches.Any(c => NormalizeEmail(c.Email) == normalizedEmail),
+            matches.Any(c => phoneVariants.Contains(c.Phone)));
     }
 
     public async Task<(
@@ -131,8 +135,7 @@ public class CandidateService(
         DuplicateCheckResult? Duplicate,
         string? Error)> CreateAsync(
             CreateCandidateRequest request,
-            Stream resumeContent,
-            string resumeFileName,
+            bool confirmDuplicate = false,
             CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(request.FullName)
@@ -171,23 +174,10 @@ public class CandidateService(
             phone,
             cancellationToken: cancellationToken);
 
-        if (duplicates.IsDuplicate)
+        if (duplicates.IsHardDuplicate
+            || (duplicates.IsDuplicate && !confirmDuplicate))
         {
             return (null, duplicates, null);
-        }
-
-        string resumePath;
-
-        try
-        {
-            resumePath = await files.SaveAsync(
-                resumeContent,
-                resumeFileName,
-                cancellationToken);
-        }
-        catch (InvalidOperationException ex)
-        {
-            return (null, null, ex.Message);
         }
 
         var candidate = new Candidate
@@ -204,7 +194,6 @@ public class CandidateService(
             Source = request.Source.Trim(),
 
             ConsentDate = request.ConsentDate,
-            ResumePath = resumePath,
             CreatedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow
         };
@@ -222,31 +211,18 @@ public class CandidateService(
         {
             db.Entry(candidate).State = EntityState.Detached;
 
-            await files.DeleteAsync(
-                resumePath,
-                CancellationToken.None);
-
             duplicates = await FindDuplicatesAsync(
                 email,
                 phone,
                 cancellationToken: cancellationToken);
 
-            if (!duplicates.IsDuplicate)
+            if (!duplicates.IsHardDuplicate)
             {
                 throw;
             }
 
             return (null, duplicates, null);
         }
-        catch
-        {
-            await files.DeleteAsync(
-                resumePath,
-                CancellationToken.None);
-
-            throw;
-        }
-
         return (ToDetail(candidate), null, null);
     }
 
@@ -581,5 +557,10 @@ public record DuplicateCheckRequest(
 
 public record DuplicateCheckResult(
     bool IsDuplicate,
-    IReadOnlyList<CandidateListItem> Matches);
-
+    IReadOnlyList<CandidateListItem> Matches,
+    bool IsHardDuplicate = false,
+    bool MatchesEmail = false,
+    bool MatchesPhone = false)
+{
+    public bool CanCreateAnyway => IsDuplicate && !IsHardDuplicate;
+}
