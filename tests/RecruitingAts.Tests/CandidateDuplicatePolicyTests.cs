@@ -3,7 +3,6 @@ using Microsoft.Extensions.Logging.Abstractions;
 using RecruitingAts.Api.Data;
 using RecruitingAts.Api.Data.Entities;
 using RecruitingAts.Api.Services;
-using RecruitingAts.Api.Storage;
 
 namespace RecruitingAts.Tests;
 
@@ -14,7 +13,7 @@ public class CandidateDuplicatePolicyTests
             .UseInMemoryDatabase(Guid.NewGuid().ToString()).Options);
 
     private static CandidateService Service(AppDbContext db) => new(
-        db, new NoFiles(), NullLogger<CandidateService>.Instance);
+        db, new CandidateTestHelpers.RecordingFileStorage(), NullLogger<CandidateService>.Instance);
 
     private static Candidate Existing(string email = "ali@example.test", string phone = "+923001234567") => new()
     {
@@ -42,13 +41,14 @@ public class CandidateDuplicatePolicyTests
         Assert.Equal(email == "ali@example.test", check.MatchesEmail);
         Assert.Equal(phone == "+923001234567", check.MatchesPhone);
 
-        var unconfirmed = await service.CreateAsync(Request(email, phone));
+        var unconfirmed = await CreateWithPdf(service, Request(email, phone));
         Assert.Null(unconfirmed.Detail);
         Assert.NotNull(unconfirmed.Duplicate);
         Assert.Single(db.Candidates);
 
-        var confirmed = await service.CreateAsync(Request(email, phone), confirmDuplicate: true);
+        var confirmed = await CreateWithPdf(service, Request(email, phone), confirmDuplicate: true);
         Assert.NotNull(confirmed.Detail);
+        Assert.True(confirmed.Detail.HasResume);
         Assert.Equal(2, await db.Candidates.CountAsync());
     }
 
@@ -63,7 +63,7 @@ public class CandidateDuplicatePolicyTests
         await using var db = CreateDb();
         db.Candidates.Add(Existing(phone: storedPhone));
         await db.SaveChangesAsync();
-        var result = await Service(db).CreateAsync(
+        var result = await CreateWithPdf(Service(db),
             Request(" ALI@EXAMPLE.TEST ", "+923001234567"), confirmDuplicate: true);
 
         Assert.Null(result.Detail);
@@ -80,7 +80,7 @@ public class CandidateDuplicatePolicyTests
         await using var db = CreateDb();
         db.Candidates.Add(Existing());
         await db.SaveChangesAsync();
-        var result = await Service(db).CreateAsync(Request("new@example.test", "+12025550171"));
+        var result = await CreateWithPdf(Service(db), Request("new@example.test", "+12025550171"));
 
         Assert.NotNull(result.Detail);
         Assert.Null(result.Duplicate);
@@ -101,17 +101,14 @@ public class CandidateDuplicatePolicyTests
         Assert.False(result.IsHardDuplicate);
         Assert.True(result.MatchesEmail);
         Assert.True(result.MatchesPhone);
-        var created = await service.CreateAsync(Request("ali@example.test", "+12025550171"), true);
+        var created = await CreateWithPdf(service, Request("ali@example.test", "+12025550171"), true);
         Assert.NotNull(created.Detail);
     }
 
-    private sealed class NoFiles : IFileStorage
+    private static async Task<(CandidateDetail? Detail, DuplicateCheckResult? Duplicate, string? Error)> CreateWithPdf(
+        CandidateService service, CreateCandidateRequest request, bool confirmDuplicate = false)
     {
-        public Task<string> SaveAsync(Stream content, string fileName, CancellationToken cancellationToken = default)
-            => throw new InvalidOperationException("JSON creation must upload the PDF separately.");
-        public Task<Stream?> OpenReadAsync(string relativePath, CancellationToken cancellationToken = default)
-            => Task.FromResult<Stream?>(null);
-        public Task DeleteAsync(string relativePath, CancellationToken cancellationToken = default)
-            => Task.CompletedTask;
+        await using var pdf = CandidateTestHelpers.MinimalPdf();
+        return await service.CreateAsync(request, pdf, "resume.pdf", confirmDuplicate);
     }
 }

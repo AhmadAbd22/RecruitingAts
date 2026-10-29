@@ -135,9 +135,17 @@ public class CandidateService(
         DuplicateCheckResult? Duplicate,
         string? Error)> CreateAsync(
             CreateCandidateRequest request,
+            Stream? resumeContent,
+            string? resumeFileName,
             bool confirmDuplicate = false,
             CancellationToken cancellationToken = default)
     {
+        if (resumeContent is null || string.IsNullOrWhiteSpace(resumeFileName)
+            || (resumeContent.CanSeek && resumeContent.Length == 0))
+        {
+            return (null, null, "A PDF resume is required.");
+        }
+
         if (string.IsNullOrWhiteSpace(request.FullName)
             || string.IsNullOrWhiteSpace(request.Email)
             || string.IsNullOrWhiteSpace(request.Phone))
@@ -180,6 +188,16 @@ public class CandidateService(
             return (null, duplicates, null);
         }
 
+        string resumePath;
+        try
+        {
+            resumePath = await files.SaveAsync(resumeContent, resumeFileName, cancellationToken);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return (null, null, ex.Message);
+        }
+
         var candidate = new Candidate
         {
             CandidateId = Guid.NewGuid(),
@@ -194,6 +212,7 @@ public class CandidateService(
             Source = request.Source.Trim(),
 
             ConsentDate = request.ConsentDate,
+            ResumePath = resumePath,
             CreatedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow
         };
@@ -210,6 +229,7 @@ public class CandidateService(
                 || sqlException.Number == 2627))
         {
             db.Entry(candidate).State = EntityState.Detached;
+            await files.DeleteAsync(resumePath, CancellationToken.None);
 
             duplicates = await FindDuplicatesAsync(
                 email,
@@ -222,6 +242,11 @@ public class CandidateService(
             }
 
             return (null, duplicates, null);
+        }
+        catch
+        {
+            await files.DeleteAsync(resumePath, CancellationToken.None);
+            throw;
         }
         return (ToDetail(candidate), null, null);
     }

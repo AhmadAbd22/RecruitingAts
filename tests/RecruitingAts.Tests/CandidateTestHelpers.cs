@@ -50,7 +50,7 @@ internal static class CandidateTestHelpers
             Email: email,
             Phone: phone,
             Skills: null,
-            Source: null,
+            Source: "Referral",
             ConsentDate: null,
             PhoneCountry: phoneCountry);
 

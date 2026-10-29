@@ -72,14 +72,29 @@ public class CandidatesController(CandidateService candidates) : ControllerBase
 
     [HttpPost]
     [Authorize(Policy = Permissions.CandidatesManage)]
-    [Consumes("application/json")]
+    [Consumes("multipart/form-data")]
+    [RequestSizeLimit(LocalFileStorage.MaxResumeBytes + 64 * 1024)]
     public async Task<ActionResult> Create(
-        [FromBody] CreateCandidateRequest request,
+        [FromForm] CreateCandidateRequest request,
+        IFormFile? file,
         [FromQuery] bool confirmDuplicate = false,
         CancellationToken cancellationToken = default)
     {
+        if (file is null || file.Length == 0)
+        {
+            return BadRequest(new { message = "A PDF resume is required." });
+        }
+
+        if (file.Length > LocalFileStorage.MaxResumeBytes)
+        {
+            return BadRequest(new { message = "PDF must be 5 MB or smaller." });
+        }
+
+        await using var stream = file.OpenReadStream();
         var (detail, duplicate, error) = await candidates.CreateAsync(
             request,
+            stream,
+            file.FileName,
             confirmDuplicate,
             cancellationToken);
 
