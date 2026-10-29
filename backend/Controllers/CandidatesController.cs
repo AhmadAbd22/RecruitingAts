@@ -77,39 +77,50 @@ public class CandidatesController(CandidateService candidates) : ControllerBase
     public async Task<ActionResult> Create(
         [FromForm] CreateCandidateRequest request,
         IFormFile? file,
+        [FromQuery] bool confirmDuplicate = false,
         CancellationToken cancellationToken = default)
     {
         if (file is null || file.Length == 0)
         {
-            return BadRequest(new
-            {
-                message = "A PDF resume is required."
-            });
+            return BadRequest(new { message = "A PDF resume is required." });
         }
 
         if (file.Length > LocalFileStorage.MaxResumeBytes)
         {
-            return BadRequest(new
-            {
-                message = "PDF must be 5 MB or smaller."
-            });
+            return BadRequest(new { message = "PDF must be 5 MB or smaller." });
         }
 
         await using var stream = file.OpenReadStream();
-
         var (detail, duplicate, error) = await candidates.CreateAsync(
             request,
             stream,
             file.FileName,
+            confirmDuplicate,
             cancellationToken);
 
         if (duplicate != null && duplicate.IsDuplicate)
         {
+            string message;
+            if (duplicate.IsHardDuplicate)
+            {
+                message = "A candidate with this email address and phone number already exists. Use the existing candidate.";
+            }
+            else if (duplicate.MatchesEmail && duplicate.MatchesPhone)
+            {
+                message = "This email address and phone number are already used by existing candidates. Review the matches before saving.";
+            }
+            else if (duplicate.MatchesEmail)
+            {
+                message = "This email address is already used by another candidate. Review the matches before saving.";
+            }
+            else
+            {
+                message = "This phone number is already used by another candidate. Review the matches before saving.";
+            }
+
             return Conflict(new
             {
-                message =
-                    "A candidate with this email or phone already exists. "
-                    + "Use the existing record.",
+                message,
                 duplicate
             });
         }

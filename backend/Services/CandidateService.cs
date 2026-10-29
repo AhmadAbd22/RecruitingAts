@@ -123,7 +123,11 @@ public class CandidateService(
 
         return new DuplicateCheckResult(
             matches.Count > 0,
-            matches);
+            matches,
+            matches.Any(c => NormalizeEmail(c.Email) == normalizedEmail
+                && phoneVariants.Contains(c.Phone)),
+            matches.Any(c => NormalizeEmail(c.Email) == normalizedEmail),
+            matches.Any(c => phoneVariants.Contains(c.Phone)));
     }
 
     public async Task<(
@@ -131,10 +135,17 @@ public class CandidateService(
         DuplicateCheckResult? Duplicate,
         string? Error)> CreateAsync(
             CreateCandidateRequest request,
-            Stream resumeContent,
-            string resumeFileName,
+            Stream? resumeContent,
+            string? resumeFileName,
+            bool confirmDuplicate = false,
             CancellationToken cancellationToken = default)
     {
+        if (resumeContent is null || string.IsNullOrWhiteSpace(resumeFileName)
+            || (resumeContent.CanSeek && resumeContent.Length == 0))
+        {
+            return (null, null, "A PDF resume is required.");
+        }
+
         if (string.IsNullOrWhiteSpace(request.FullName)
             || string.IsNullOrWhiteSpace(request.Email)
             || string.IsNullOrWhiteSpace(request.Phone))
@@ -171,19 +182,16 @@ public class CandidateService(
             phone,
             cancellationToken: cancellationToken);
 
-        if (duplicates.IsDuplicate)
+        if (duplicates.IsHardDuplicate
+            || (duplicates.IsDuplicate && !confirmDuplicate))
         {
             return (null, duplicates, null);
         }
 
         string resumePath;
-
         try
         {
-            resumePath = await files.SaveAsync(
-                resumeContent,
-                resumeFileName,
-                cancellationToken);
+            resumePath = await files.SaveAsync(resumeContent, resumeFileName, cancellationToken);
         }
         catch (InvalidOperationException ex)
         {
@@ -221,17 +229,14 @@ public class CandidateService(
                 || sqlException.Number == 2627))
         {
             db.Entry(candidate).State = EntityState.Detached;
-
-            await files.DeleteAsync(
-                resumePath,
-                CancellationToken.None);
+            await files.DeleteAsync(resumePath, CancellationToken.None);
 
             duplicates = await FindDuplicatesAsync(
                 email,
                 phone,
                 cancellationToken: cancellationToken);
 
-            if (!duplicates.IsDuplicate)
+            if (!duplicates.IsHardDuplicate)
             {
                 throw;
             }
@@ -240,13 +245,9 @@ public class CandidateService(
         }
         catch
         {
-            await files.DeleteAsync(
-                resumePath,
-                CancellationToken.None);
-
+            await files.DeleteAsync(resumePath, CancellationToken.None);
             throw;
         }
-
         return (ToDetail(candidate), null, null);
     }
 
@@ -581,5 +582,10 @@ public record DuplicateCheckRequest(
 
 public record DuplicateCheckResult(
     bool IsDuplicate,
-    IReadOnlyList<CandidateListItem> Matches);
-
+    IReadOnlyList<CandidateListItem> Matches,
+    bool IsHardDuplicate = false,
+    bool MatchesEmail = false,
+    bool MatchesPhone = false)
+{
+    public bool CanCreateAnyway => IsDuplicate && !IsHardDuplicate;
+}

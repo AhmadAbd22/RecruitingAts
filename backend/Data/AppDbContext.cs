@@ -87,8 +87,9 @@ public class AppDbContext : IdentityDbContext<ApplicationUser>
             e.Property(x => x.Skills).HasMaxLength(1000);
             e.Property(x => x.ResumePath).HasMaxLength(500);
             e.Property(x => x.Source).HasMaxLength(100);
-            e.HasIndex(x => x.Email).IsUnique();
-            e.HasIndex(x => x.Phone).IsUnique();
+            e.HasIndex(x => x.Email);
+            e.HasIndex(x => x.Phone);
+            e.HasIndex(x => new { x.Email, x.Phone }).IsUnique();
         });
 
         builder.Entity<PipelineStage>(e =>
