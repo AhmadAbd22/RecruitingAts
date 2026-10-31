@@ -5,8 +5,6 @@ export type RequisitionFormValues = {
   seniority: string
   skills: string
   jobDescription: string
-  openings: number
-  hiringManagerEmployeeId: string
 }
 
 export type RequisitionFormProps = {
@@ -97,28 +95,6 @@ export function RequisitionForm({
         <textarea
           value={values.jobDescription}
           onChange={(e) => set('jobDescription', e.target.value)}
-          required
-          disabled={disabled}
-        />
-      </label>
-      <label className="field">
-        Openings
-        <input
-          type="number"
-          min={1}
-          value={values.openings}
-          onChange={(e) => set('openings', Number(e.target.value) || 1)}
-          required
-          disabled={disabled}
-        />
-      </label>
-      <label className="field">
-        Hiring manager employee ID
-        <input
-          value={values.hiringManagerEmployeeId}
-          onChange={(e) => set('hiringManagerEmployeeId', e.target.value)}
-          placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
-          pattern="[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}"
           required
           disabled={disabled}
         />
