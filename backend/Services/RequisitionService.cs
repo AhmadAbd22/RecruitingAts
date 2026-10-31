@@ -79,6 +79,19 @@ public class RequisitionService(
         {
             return (null, "Missing REQUISITIONS.MANAGE permission.");
         }
+        if (request is null)
+            return (null, "Request body is required.");
+
+        if (string.IsNullOrWhiteSpace(request.Title) ||
+            string.IsNullOrWhiteSpace(request.Department) ||
+            string.IsNullOrWhiteSpace(request.EmploymentType) ||
+            string.IsNullOrWhiteSpace(request.Seniority) ||
+            string.IsNullOrWhiteSpace(request.Skills) ||
+            string.IsNullOrWhiteSpace(request.JobDescription))
+        {
+            return (null, "All requisition fields are required.");
+        }
+        
 
         var employeeId = await scope.GetEmployeeIdAsync(user, cancellationToken);
         if (employeeId is null)
