@@ -6,7 +6,9 @@ import type {
   CreateRequisitionResponse,
   CreateApplicationRequest,
   CreateApplicationResponse,
+  EmployeeListItem,
   PipelineStage,
+  RequisitionDetail,
   RequisitionListItem,
   UpdateApplicationStageRequest,
 } from '../types/domain'
@@ -100,6 +102,100 @@ export async function searchApplicationCandidates(query: string) {
 
 export async function getRequisitions() {
   const { data } = await api.get<RequisitionListItem[]>('/requisitions')
+  return data
+}
+
+export async function getEmployees() {
+  const { data } = await api.get<EmployeeListItem[]>('/employees')
+  return data
+}
+
+export async function getRequisition(requisitionId: string) {
+  const { data } = await api.get<RequisitionDetail>(`/requisitions/${requisitionId}`)
+  return data
+}
+
+export async function submitRequisition(requisitionId: string) {
+  const { data } = await api.post<RequisitionDetail>(`/requisitions/${requisitionId}/submit`)
+  return data
+}
+
+export async function approveRequisition(requisitionId: string) {
+  const { data } = await api.post<RequisitionDetail>(`/requisitions/${requisitionId}/approve`)
+  return data
+}
+
+export async function rejectRequisition(requisitionId: string, reason: string) {
+  const { data } = await api.post<RequisitionDetail>(`/requisitions/${requisitionId}/reject`, {
+    reason,
+  })
+  return data
+}
+
+export async function publishRequisition(requisitionId: string) {
+  const { data } = await api.post<RequisitionDetail>(`/requisitions/${requisitionId}/publish`)
+  return data
+}
+
+export async function holdRequisition(requisitionId: string, reason: string) {
+  const { data } = await api.post<RequisitionDetail>(`/requisitions/${requisitionId}/hold`, {
+    reason,
+  })
+  return data
+}
+
+export async function closeRequisition(requisitionId: string, reason: string) {
+  const { data } = await api.post<RequisitionDetail>(`/requisitions/${requisitionId}/close`, {
+    reason,
+  })
+  return data
+}
+
+export async function cancelRequisition(requisitionId: string, reason: string) {
+  const { data } = await api.post<RequisitionDetail>(`/requisitions/${requisitionId}/cancel`, {
+    reason,
+  })
+  return data
+}
+
+export async function fillRequisition(requisitionId: string, reason: string) {
+  const { data } = await api.post<RequisitionDetail>(`/requisitions/${requisitionId}/fill`, {
+    reason,
+  })
+  return data
+}
+
+export async function updateRequisitionBudget(
+  requisitionId: string,
+  budgetMin: number | null,
+  budgetMax: number | null,
+) {
+  const { data } = await api.put<RequisitionDetail>(
+    `/requisitions/${requisitionId}/budget`,
+    { budgetMin, budgetMax },
+  )
+  return data
+}
+
+export async function addRequisitionTeamMember(
+  requisitionId: string,
+  employeeId: string,
+  teamRole: 'Recruiter' | 'TechnicalInterviewer' | 'FinalInterviewer',
+) {
+  const { data } = await api.post<RequisitionDetail>(
+    `/requisitions/${requisitionId}/team-members`,
+    { employeeId, teamRole },
+  )
+  return data
+}
+
+export async function removeRequisitionTeamMember(
+  requisitionId: string,
+  requisitionTeamMemberId: string,
+) {
+  const { data } = await api.delete<{ message: string }>(
+    `/requisitions/${requisitionId}/team-members/${requisitionTeamMemberId}`,
+  )
   return data
 }
 

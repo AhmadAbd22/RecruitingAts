@@ -25,6 +25,13 @@ export type TeamMember = {
   teamRole: TeamRole | string
 }
 
+export type EmployeeListItem = {
+  employeeId: string
+  fullName: string
+  email: string
+  department: string
+}
+
 export type RequisitionListItem = {
   requisitionId: string
   title: string
@@ -35,7 +42,8 @@ export type RequisitionListItem = {
   budgetMax?: number | null
 }
 
-export type CreateRequisitionRequest = {
+export type RequisitionDetail = {
+  requisitionId: string
   title: string
   department: string
   employmentType: string
@@ -43,7 +51,22 @@ export type CreateRequisitionRequest = {
   skills: string
   jobDescription: string
   openings: number
+  status: RequisitionStatus | string
+  statusReason?: string | null
   hiringManagerEmployeeId: string
+  hiringManagerName: string
+  budgetMin?: number | null
+  budgetMax?: number | null
+  team: TeamMember[]
+}
+
+export type CreateRequisitionRequest = {
+  title: string
+  department: string
+  employmentType: string
+  seniority: string
+  skills: string
+  jobDescription: string
 }
 
 export type CreateRequisitionResponse = RequisitionListItem & {

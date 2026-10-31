@@ -22,7 +22,9 @@ export function BudgetPanel({
           {budgetMin ?? '—'} – {budgetMax ?? '—'}
         </p>
       ) : (
-        <p className="chip chip-warn">Hidden · need ATS.COMPENSATION.VIEW</p>
+        <p className="chip chip-warn">
+          Budget information is restricted. You don't have permission to view compensation details.
+        </p>
       )}
       {canEdit ? (
         <button type="button" className="btn btn-ghost" onClick={onEdit}>

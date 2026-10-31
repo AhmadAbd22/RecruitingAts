@@ -25,8 +25,6 @@ export function RequisitionsListPage() {
     seniority: 'Mid',
     skills: '',
     jobDescription: '',
-    openings: 1,
-    hiringManagerEmployeeId: '',
   })
   const [createError, setCreateError] = useState<string | null>(null)
   const [createPending, setCreatePending] = useState(false)
@@ -128,8 +126,6 @@ export function RequisitionsListPage() {
                 seniority: form.seniority,
                 skills: form.skills.trim(),
                 jobDescription: form.jobDescription.trim(),
-                openings: form.openings,
-                hiringManagerEmployeeId: form.hiringManagerEmployeeId.trim(),
               })
               setOpen(false)
               setCreateError(null)
