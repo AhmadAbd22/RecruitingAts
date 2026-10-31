@@ -1,12 +1,81 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
+using Microsoft.Extensions.Logging.Abstractions;
+using RecruitingAts.Api.Data;
+using RecruitingAts.Api.Services;
 
 namespace RecruitingAts.Tests;
 
 /// <summary>
-/// Resume attach/replace behavior for talent-pool candidates.
+/// Required-PDF creation and resume attach/replace behavior for talent-pool candidates.
 /// </summary>
 public class CandidateResumeTests
 {
+    [Fact]
+    public async Task Create_WithoutResume_DoesNotSaveCandidate()
+    {
+        var (db, service, files) = CandidateTestHelpers.CreateSut();
+        var result = await service.CreateAsync(CandidateTestHelpers.CreateRequest(), null, null);
+
+        Assert.Null(result.Detail);
+        Assert.Equal("A PDF resume is required.", result.Error);
+        Assert.Empty(db.Candidates);
+        Assert.Empty(files.Saved);
+    }
+
+    [Fact]
+    public async Task Create_WithEmptyResume_DoesNotSaveCandidate()
+    {
+        var (db, service, files) = CandidateTestHelpers.CreateSut();
+        await using var empty = new MemoryStream();
+        var result = await service.CreateAsync(CandidateTestHelpers.CreateRequest(), empty, "resume.pdf");
+
+        Assert.Null(result.Detail);
+        Assert.Equal("A PDF resume is required.", result.Error);
+        Assert.Empty(db.Candidates);
+        Assert.Empty(files.Saved);
+    }
+
+    [Fact]
+    public async Task Create_WhenResumeIsRejected_DoesNotSaveCandidate()
+    {
+        var (db, service, files) = CandidateTestHelpers.CreateSut();
+        files.ThrowOnSave = true;
+        await using var pdf = CandidateTestHelpers.MinimalPdf();
+        var result = await service.CreateAsync(CandidateTestHelpers.CreateRequest(), pdf, "resume.txt");
+
+        Assert.Null(result.Detail);
+        Assert.Equal("Only PDF files are allowed.", result.Error);
+        Assert.Empty(db.Candidates);
+        Assert.Empty(files.Saved);
+    }
+
+    [Fact]
+    public async Task Create_WhenDatabaseSaveFails_DeletesNewResume()
+    {
+        await using var db = new AppDbContext(new DbContextOptionsBuilder<AppDbContext>()
+            .UseInMemoryDatabase(Guid.NewGuid().ToString())
+            .AddInterceptors(new RejectSave()).Options);
+        var files = new CandidateTestHelpers.RecordingFileStorage();
+        var service = new CandidateService(db, files, NullLogger<CandidateService>.Instance);
+        await using var pdf = CandidateTestHelpers.MinimalPdf();
+
+        await Assert.ThrowsAsync<DbUpdateException>(() => service.CreateAsync(
+            CandidateTestHelpers.CreateRequest(), pdf, "resume.pdf"));
+
+        Assert.Single(files.Saved);
+        Assert.Contains(files.Saved[0], files.Deleted);
+        Assert.Empty(await db.Candidates.AsNoTracking().ToListAsync());
+    }
+
+    private sealed class RejectSave : SaveChangesInterceptor
+    {
+        public override ValueTask<InterceptionResult<int>> SavingChangesAsync(
+            DbContextEventData eventData, InterceptionResult<int> result,
+            CancellationToken cancellationToken = default)
+            => throw new DbUpdateException("Synthetic database failure.");
+    }
+
     [Fact]
     public async Task AttachResume_ReplacesPreviousAndDeletesOldFile()
     {
