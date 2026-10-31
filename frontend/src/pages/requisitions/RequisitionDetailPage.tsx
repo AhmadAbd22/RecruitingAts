@@ -1,47 +1,32 @@
+import React, { useEffect, useState } from 'react'
 import { useParams } from 'react-router-dom'
-import { Permissions } from '../../api/client'
-import { usePermissions } from '../../auth/usePermission'
-import {
-  BudgetPanel,
-  StatusActions,
-  TeamPanel,
-} from '../../components/requisitions'
-import { EmptyState, PageHeader, StatusChip } from '../../components/shared'
+import { getRequisitionById } from '../../api/client'
+import type { RequisitionListItem } from '../../types/domain'
 
-/** Owner: Amina (+ team panel: Abdul-Manan) */
 export function RequisitionDetailPage() {
-  const { id } = useParams()
-  const { can } = usePermissions()
+    const { id } = useParams<{ id: string }>()
+    const [requisition, setRequisition] = useState<RequisitionListItem | null>(null)
+    const [loading, setLoading] = useState(true)
 
-  // TODO: load requisition by id
-  const status = 'Draft'
+    useEffect(() => {
+        if (id) {
+            getRequisitionById(id)
+                .then((data) => setRequisition(data))
+                .catch((err) => console.error(err))
+                .finally(() => setLoading(false))
+        }
+    }, [id])
 
-  return (
-    <div className="page">
-      <PageHeader
-        title="Requisition detail"
-        subtitle={id}
-        actions={<StatusChip status={status} />}
-      />
-      <EmptyState
-        title="Wire data"
-        message="Load GET /api/requisitions/{id} then pass props into the panels below."
-      />
-      <div className="grid-2">
-        <section className="panel">
-          <h2>Workflow</h2>
-          <StatusActions
-            status={status}
-            canManage={can(Permissions.RequisitionsManage)}
-            canApprove={can(Permissions.RequisitionsApprove)}
-          />
-        </section>
-        <BudgetPanel
-          canView={can(Permissions.CompensationView)}
-          canEdit={can(Permissions.CompensationEdit)}
-        />
-      </div>
-      <TeamPanel members={[]} canManage={can(Permissions.RequisitionsManage)} />
-    </div>
+    if (loading) {
+        return <div className="page" > Loading...</div>
+    }
+
+    return (
+        <div className= "page" >
+        <h1>{ requisition?.title ?? 'Requisition Detail'
+} </h1>
+    < p > Department: { requisition?.department } </p>
+        < p > Status: { requisition?.status } </p>
+            </div>
   )
 }
