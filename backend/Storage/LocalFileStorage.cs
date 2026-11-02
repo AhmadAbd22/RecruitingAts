@@ -1,5 +1,5 @@
 namespace RecruitingAts.Api.Storage;
-
+using System.Text;
 public class LocalFileStorage : IFileStorage
 {
     public const long MaxResumeBytes = 5 * 1024 * 1024;
@@ -16,42 +16,94 @@ public class LocalFileStorage : IFileStorage
         Directory.CreateDirectory(_root);
     }
 
-    public async Task<string> SaveAsync(Stream content, string fileName, CancellationToken cancellationToken = default)
+public async Task<string> SaveAsync(
+    Stream content,
+    string fileName,
+    CancellationToken cancellationToken = default)
+{
+    var safeName = Path.GetFileName(fileName);
+    var extension = Path.GetExtension(safeName);
+
+    if (!string.Equals(
+        extension,
+        ".pdf",
+        StringComparison.OrdinalIgnoreCase))
     {
-        var safeName = Path.GetFileName(fileName);
-        var extension = Path.GetExtension(safeName);
-        if (!string.Equals(extension, ".pdf", StringComparison.OrdinalIgnoreCase))
-        {
-            throw new InvalidOperationException("Only PDF files are allowed.");
-        }
+        throw new InvalidOperationException(
+            "Only PDF files are allowed.");
+    }
 
-        if (content.CanSeek && content.Length > MaxResumeBytes)
-        {
-            throw new InvalidOperationException($"PDF must be {MaxResumeBytes / (1024 * 1024)} MB or smaller.");
-        }
+    if (content.CanSeek && content.Length > MaxResumeBytes)
+    {
+        throw new InvalidOperationException(
+            "PDF must be 5 MB or smaller.");
+    }
 
-        var storedName = $"{Guid.NewGuid():N}.pdf";
-        var fullPath = Path.Combine(_root, storedName);
+    var header = new byte[5];
 
-        await using var file = File.Create(fullPath);
+    try
+    {
+        await content.ReadExactlyAsync(
+            header.AsMemory(),
+            cancellationToken);
+    }
+    catch (EndOfStreamException)
+    {
+        throw new InvalidOperationException(
+            "The file does not have a PDF header.");
+    }
+
+    if (Encoding.ASCII.GetString(header) != "%PDF-")
+    {
+        throw new InvalidOperationException(
+            "The file does not have a PDF header.");
+    }
+
+    var storedName = $"{Guid.NewGuid():N}.pdf";
+    var fullPath = Path.Combine(_root, storedName);
+
+    await using var file = new FileStream(
+        fullPath,
+        FileMode.CreateNew,
+        FileAccess.Write,
+        FileShare.None);
+
+    try
+    {
+        await file.WriteAsync(
+            header.AsMemory(),
+            cancellationToken);
+
         var buffer = new byte[81920];
-        long total = 0;
+        long total = header.Length;
         int read;
-        while ((read = await content.ReadAsync(buffer.AsMemory(0, buffer.Length), cancellationToken)) > 0)
+
+        while ((read = await content.ReadAsync(
+            buffer.AsMemory(),
+            cancellationToken)) > 0)
         {
             total += read;
+
             if (total > MaxResumeBytes)
             {
-                await file.DisposeAsync();
-                File.Delete(fullPath);
-                throw new InvalidOperationException($"PDF must be {MaxResumeBytes / (1024 * 1024)} MB or smaller.");
+                throw new InvalidOperationException(
+                    "PDF must be 5 MB or smaller.");
             }
 
-            await file.WriteAsync(buffer.AsMemory(0, read), cancellationToken);
+            await file.WriteAsync(
+                buffer.AsMemory(0, read),
+                cancellationToken);
         }
-
-        return storedName;
     }
+    catch
+    {
+        await file.DisposeAsync();
+        File.Delete(fullPath);
+        throw;
+    }
+
+    return storedName;
+}
 
     public Task<Stream?> OpenReadAsync(string relativePath, CancellationToken cancellationToken = default)
     {

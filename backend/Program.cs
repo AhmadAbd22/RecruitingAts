@@ -82,6 +82,8 @@ builder.Services.AddScoped<IRequisitionService, RequisitionService>();
 builder.Services.AddScoped<CandidateService>();
 builder.Services.AddScoped<ApplicationService>();
 
+builder.Services.AddScoped<InterviewService>();
+
 var app = builder.Build();
 
 await DbSeeder.SeedAsync(app.Services);

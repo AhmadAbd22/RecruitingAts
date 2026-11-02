@@ -356,10 +356,11 @@ namespace RecruitingAts.Api.Data.Migrations
 
                     b.HasKey("CandidateId");
 
-                    b.HasIndex("Email")
-                        .IsUnique();
+                    b.HasIndex("Email");
 
-                    b.HasIndex("Phone")
+                    b.HasIndex("Phone");
+
+                    b.HasIndex("Email", "Phone")
                         .IsUnique();
 
                     b.ToTable("Candidates");

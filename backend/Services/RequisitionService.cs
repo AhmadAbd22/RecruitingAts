@@ -79,6 +79,19 @@ public class RequisitionService(
         {
             return (null, "Missing REQUISITIONS.MANAGE permission.");
         }
+        if (request is null)
+            return (null, "Request body is required.");
+
+        if (string.IsNullOrWhiteSpace(request.Title) ||
+            string.IsNullOrWhiteSpace(request.Department) ||
+            string.IsNullOrWhiteSpace(request.EmploymentType) ||
+            string.IsNullOrWhiteSpace(request.Seniority) ||
+            string.IsNullOrWhiteSpace(request.Skills) ||
+            string.IsNullOrWhiteSpace(request.JobDescription))
+        {
+            return (null, "All requisition fields are required.");
+        }
+        
 
         var employeeId = await scope.GetEmployeeIdAsync(user, cancellationToken);
         if (employeeId is null)
@@ -86,12 +99,11 @@ public class RequisitionService(
             return (null, "Current user has no Employee record.");
         }
 
-        var hiringManagerExists = await db.Employees.AnyAsync(
-            e => e.EmployeeId == request.HiringManagerEmployeeId && e.IsActive,
-            cancellationToken);
-        if (!hiringManagerExists)
+        var demoHiringManager = await db.Employees
+            .FirstOrDefaultAsync(e => e.Email == "manager@demo.local" && e.IsActive, cancellationToken);
+        if (demoHiringManager is null)
         {
-            return (null, "Hiring manager not found.");
+            return (null, "Demo hiring manager not found or inactive.");
         }
 
         var now = DateTime.UtcNow;
@@ -106,7 +118,7 @@ public class RequisitionService(
             JobDescription = request.JobDescription.Trim(),
             Openings = request.Openings < 1 ? 1 : request.Openings,
             Status = RequisitionStatuses.Draft,
-            HiringManagerEmployeeId = request.HiringManagerEmployeeId,
+            HiringManagerEmployeeId = demoHiringManager.EmployeeId,
             BudgetMin = null,
             BudgetMax = null,
             CreatedAt = now,
@@ -514,8 +526,7 @@ public record CreateRequisitionRequest(
     string Seniority,
     string Skills,
     string JobDescription,
-    int Openings,
-    Guid HiringManagerEmployeeId);
+    int Openings);
 
 public record RequisitionListItem(
     Guid RequisitionId,
