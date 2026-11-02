@@ -19,7 +19,8 @@ RUN mkdir -p /app/App_Data/resumes
 
 ENV ASPNETCORE_ENVIRONMENT=Production
 ENV Database__Provider=Sqlite
-ENV ConnectionStrings__DefaultConnection=Data Source=/app/App_Data/recruitingats.db
+# Quote required: unquoted ENV stops at the first space and becomes just "Data".
+ENV ConnectionStrings__DefaultConnection="Data Source=/app/App_Data/recruitingats.db"
 ENV FileStorage__Root=/app/App_Data/resumes
 ENV ASPNETCORE_URLS=http://0.0.0.0:8080
 

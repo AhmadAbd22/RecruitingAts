@@ -30,25 +30,26 @@ builder.Services.AddSwaggerGen();
 
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
 var provider = builder.Configuration["Database:Provider"];
+var hasSqliteConnection =
+    !string.IsNullOrWhiteSpace(connectionString)
+    && connectionString.Contains("Data Source=", StringComparison.OrdinalIgnoreCase);
 var useSqlite =
-    string.Equals(provider, "Sqlite", StringComparison.OrdinalIgnoreCase)
-    || (!string.IsNullOrWhiteSpace(connectionString)
-        && connectionString.Contains("Data Source=", StringComparison.OrdinalIgnoreCase));
+    string.Equals(provider, "Sqlite", StringComparison.OrdinalIgnoreCase) || hasSqliteConnection;
 
 builder.Services.AddDbContext<AppDbContext>(options =>
 {
     if (useSqlite)
     {
-        var sqlite =
-            string.IsNullOrWhiteSpace(connectionString)
-                ? "Data Source=App_Data/recruitingats.db"
-                : connectionString;
+        // Fall back when Docker/env truncates an unquoted "Data Source=..." value.
+        var sqlite = hasSqliteConnection
+            ? connectionString!
+            : "Data Source=App_Data/recruitingats.db";
         var dataSource = sqlite
             .Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
             .FirstOrDefault(part => part.StartsWith("Data Source=", StringComparison.OrdinalIgnoreCase));
         if (dataSource is not null)
         {
-            var path = dataSource["Data Source=".Length..].Trim();
+            var path = dataSource["Data Source=".Length..].Trim().Trim('"');
             var dir = Path.GetDirectoryName(path);
             if (!string.IsNullOrWhiteSpace(dir))
             {
