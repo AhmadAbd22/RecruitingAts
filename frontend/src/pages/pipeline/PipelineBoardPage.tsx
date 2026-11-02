@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import '../management.css'
 import axios from 'axios'
 import { getPipeline, getPipelineStages, updateApplicationStage } from '../../api/client'
 import type {
@@ -192,11 +193,21 @@ export function PipelineBoardPage() {
   }
 
   return (
-    <div className="page">
+    <div className="page management-page pipeline-page">
       <PageHeader
         title="Pipeline board"
-        subtitle="Applications in requisitions you can access."
+        subtitle="Select a candidate card to review or move their application."
       />
+      {!loading && !error && !stagesLoading && !stagesError && (
+        <div className="pipeline-toolbar">
+          <div className="pipeline-totals" aria-label="Pipeline summary">
+            <span><strong>{applications.length}</strong> {applications.length === 1 ? 'application' : 'applications'}</span>
+            <span><strong>{pipelineStages.length}</strong> {pipelineStages.length === 1 ? 'stage' : 'stages'}</span>
+          </div>
+          <p><span aria-hidden="true">↔</span> Scroll sideways to see all stages</p>
+        </div>
+      )}
+      <div className="management-notice management-info">Disqualified and NFA need a reason. Final outcomes cannot be moved back through the board.</div>
       {stagesLoading ? (
         <div className="empty-state" role="status">Loading pipeline stages…</div>
       ) : stagesError ? (
@@ -227,7 +238,7 @@ export function PipelineBoardPage() {
           </Button>
         </div>
       ) : (
-        <div className="board-row">
+        <div className="board-row" tabIndex={0} role="region" aria-label="Application stages; scroll horizontally to see all stages">
           {pipelineStages.map((stage) => (
             <StageColumn
               key={stage.pipelineStageId}

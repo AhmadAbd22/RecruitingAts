@@ -67,6 +67,8 @@ export type CreateRequisitionRequest = {
   seniority: string
   skills: string
   jobDescription: string
+  hiringManagerEmployeeId: string
+  openings: number
 }
 
 export type CreateRequisitionResponse = RequisitionListItem & {

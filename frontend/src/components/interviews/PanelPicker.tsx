@@ -36,9 +36,9 @@ export function PanelPicker({
                 checked={checked}
                 onChange={() => onToggleMember(m.employeeId)}
               />
-              {m.name} <span className="chip chip-neutral">{m.teamRole}</span>
+              <span className="interview-panel-person"><strong>{m.name}</strong><small>{m.teamRole}</small></span>
             </label>
-            <label className="row gap muted">
+            <label className="row gap muted interview-panel-lead">
               <input
                 type="radio"
                 name="panel-lead"

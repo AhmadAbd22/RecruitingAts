@@ -1,0 +1,76 @@
+.date-entry { position: relative; }
+body .date-entry input { padding-right: 3.3rem !important; }
+.date-entry input::-webkit-calendar-picker-indicator { display: none; }
+.date-required { color: var(--danger); }
+.date-open {
+  position: absolute; right: 6px; top: 50%; transform: translateY(-50%);
+  display: grid; place-items: center; width: 34px; height: 34px;
+  padding: 7px; border: 1px solid #cce1d9; border-radius: 8px;
+  background: #edf7f2; color: #08715f; cursor: pointer;
+}
+.date-open svg { width: 19px; height: 19px; }
+.date-open:hover:not(:disabled) { background: #dceddf; border-color: #8ebea9; }
+.date-open:disabled { opacity: .5; cursor: not-allowed; }
+.date-open:focus-visible { outline: 3px solid #86c9b8; outline-offset: 2px; }
+.date-calendar {
+  width: min(320px, calc(100vw - 24px)); max-height: calc(100dvh - 32px); overflow: auto;
+  padding: 0; border: 1px solid #d6e2dc; border-radius: 14px; background: white;
+  color: var(--ink); box-shadow: 0 24px 80px #102b4040; font-family: var(--font);
+}
+.date-calendar::backdrop { background: #102b4059; }
+.date-calendar-content { padding: 14px; }
+.date-calendar-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding-bottom: 10px; border-bottom: 1px solid #e3ebe6; }
+.date-calendar-head span { display: none; }
+.date-calendar-head h2 { margin: 0; font-size: .9rem; }
+.date-calendar-close { display: grid; place-items: center; width: 28px; height: 28px; padding: 0; border: 1px solid #dce5df; border-radius: 7px; background: white; color: #52685e; font-size: 1.25rem; cursor: pointer; }
+.date-calendar .rdp-root {
+  --rdp-accent-color: #087d6d;
+  --rdp-accent-background-color: #e5f4ed;
+  --rdp-day-height: 33px;
+  --rdp-day-width: 38px;
+  --rdp-day_button-height: 31px;
+  --rdp-day_button-width: 34px;
+  --rdp-day_button-border-radius: 7px;
+  --rdp-nav_button-height: 29px;
+  --rdp-nav_button-width: 29px;
+  --rdp-nav-height: 34px;
+  margin: 10px 0; font-size: .8rem;
+}
+.date-calendar .rdp-months { max-width: none; }
+.date-calendar .rdp-month { width: 100%; }
+.date-calendar .rdp-month_grid { width: 100%; }
+.date-calendar :is(th, td) { padding: 0; border: 0; background: none; text-align: center; text-transform: none; letter-spacing: normal; }
+.date-calendar .rdp-weekday { height: 28px; color: #718579; font-size: .68rem; font-weight: 600; }
+.date-calendar .rdp-day_button { margin: 1px auto; font: inherit; }
+.date-calendar .rdp-day_button:hover { background: #edf6f1; }
+.date-calendar .rdp-selected .rdp-day_button { background: #087d6d; border-color: #087d6d; color: white; font-weight: 700; }
+.date-calendar .rdp-today:not(.rdp-selected) .rdp-day_button { border: 1px solid #8ec1ad; color: #076655; font-weight: 700; }
+.date-calendar .rdp-dropdown_root { padding: .35rem .4rem; border-radius: 7px; background: #f1f6f3; }
+.date-calendar .rdp-caption_label { font-size: .8rem; }
+.date-calendar .rdp-button_previous, .date-calendar .rdp-button_next { border: 1px solid #dce5df; border-radius: 8px; background: white; }
+.date-calendar :is(button, select):focus-visible { outline: 3px solid #89c9b7; outline-offset: 2px; }
+.date-calendar-foot { display: flex; justify-content: space-between; gap: 12px; padding-top: 10px; border-top: 1px solid #e3ebe6; }
+.date-calendar-foot .btn { min-height: 34px; padding: 6px 10px; font-size: .75rem; }
+@supports (appearance: base-select) {
+  .date-calendar .rdp-dropdown, .date-calendar .rdp-dropdown::picker(select) { appearance: base-select; }
+  .date-calendar .rdp-dropdown_root { padding: 0; background: none; }
+  .date-calendar .rdp-dropdown_root > .rdp-caption_label { display: none; }
+  .date-calendar .rdp-dropdown {
+    position: static; opacity: 1; width: auto; height: 30px; padding: 5px 7px;
+    border: 1px solid #d5e4dc; border-radius: 7px; background: #edf6f1;
+    color: #125c48; font: inherit; font-size: .76rem; font-weight: 600; cursor: pointer;
+  }
+  .date-calendar .rdp-dropdown::picker-icon { color: #267a62; margin-left: 8px; }
+  .date-calendar .rdp-dropdown::picker(select) {
+    padding: 4px; margin-block: 4px; max-height: 210px; overflow-y: auto;
+    border: 1px solid #d3e1d9; border-radius: 10px; background: white;
+    box-shadow: 0 8px 24px #163d2d26; color: #244636; font-family: var(--font); font-size: .78rem;
+  }
+  .date-calendar .rdp-dropdown option { display: flex; align-items: center; gap: 8px; min-height: 30px; padding: 6px 8px; border-radius: 6px; cursor: pointer; }
+  .date-calendar .rdp-dropdown option:is(:hover, :focus-visible) { background: #edf6f1; outline: none; }
+  .date-calendar .rdp-dropdown option:checked { background: #087d6d; color: white; }
+}
+@media (max-width: 380px) {
+  .date-calendar-content { padding: 14px; }
+  .date-calendar .rdp-root { --rdp-day-width: 36px; --rdp-day_button-width: 34px; }
+}

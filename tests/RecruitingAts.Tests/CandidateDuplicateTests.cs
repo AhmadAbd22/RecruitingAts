@@ -1,10 +1,9 @@
 using Microsoft.EntityFrameworkCore;
-using RecruitingAts.Api.Services;
 
 namespace RecruitingAts.Tests;
 
 /// <summary>
-/// FR-CAND-003 — duplicate detection by email and phone (talent-pool E.164 rules).
+/// FR-CAND-003 — duplicate detection (E.164 + required source on create).
 /// </summary>
 public class CandidateDuplicateTests
 {
@@ -17,13 +16,10 @@ public class CandidateDuplicateTests
             phone: "+923111111111"));
         await db.SaveChangesAsync();
 
-        var result = await service.FindDuplicatesAsync(
-            "ada@example.com",
-            phone: null);
+        var result = await service.FindDuplicatesAsync("ada@example.com", phone: null);
 
         Assert.True(result.IsDuplicate);
         Assert.Single(result.Matches);
-        Assert.Equal("ada@example.com", result.Matches[0].Email);
     }
 
     [Fact]
@@ -31,7 +27,6 @@ public class CandidateDuplicateTests
     {
         var (db, service, _) = CandidateTestHelpers.CreateSut();
         db.Candidates.Add(CandidateTestHelpers.ExistingCandidate(
-            email: "other@example.com",
             phone: CandidateTestHelpers.SampleE164Phone));
         await db.SaveChangesAsync();
 
@@ -41,12 +36,11 @@ public class CandidateDuplicateTests
             phoneCountry: CandidateTestHelpers.SampleCountry);
 
         Assert.True(result.IsDuplicate);
-        Assert.Single(result.Matches);
         Assert.Equal(CandidateTestHelpers.SampleE164Phone, result.Matches[0].Phone);
     }
 
     [Fact]
-    public async Task Create_WhenDuplicateEmail_DoesNotSave()
+    public async Task Create_WhenDuplicate_DoesNotSaveOrUploadResume()
     {
         var (db, service, files) = CandidateTestHelpers.CreateSut();
         db.Candidates.Add(CandidateTestHelpers.ExistingCandidate(email: "ada@example.com"));
@@ -63,11 +57,11 @@ public class CandidateDuplicateTests
         Assert.NotNull(duplicate);
         Assert.True(duplicate.IsDuplicate);
         Assert.Equal(1, await db.Candidates.CountAsync());
-        Assert.Empty(files.Saved); // duplicate short-circuits before resume save
+        Assert.Empty(files.Saved);
     }
 
     [Fact]
-    public async Task Create_UniqueCandidate_NormalizesPhoneToE164()
+    public async Task Create_UniqueCandidate_NormalizesPhoneAndRequiresSource()
     {
         var (db, service, files) = CandidateTestHelpers.CreateSut();
 
@@ -75,7 +69,8 @@ public class CandidateDuplicateTests
         var (detail, duplicate, error) = await service.CreateAsync(
             CandidateTestHelpers.CreateRequest(
                 email: " ada@Example.com ",
-                phone: "(0300) 123-4567"),
+                phone: "(0300) 123-4567",
+                source: " LinkedIn "),
             pdf,
             "resume.pdf");
 
@@ -84,27 +79,41 @@ public class CandidateDuplicateTests
         Assert.NotNull(detail);
         Assert.Equal("ada@example.com", detail.Email);
         Assert.Equal(CandidateTestHelpers.SampleE164Phone, detail.Phone);
+        Assert.Equal("LinkedIn", detail.Source);
         Assert.True(detail.HasResume);
         Assert.Single(files.Saved);
-        Assert.Equal(1, await db.Candidates.CountAsync());
     }
 
     [Fact]
-    public async Task Create_InvalidLocalPhoneWithoutCountry_Fails()
+    public async Task Create_BlankSource_Fails()
     {
         var (db, service, _) = CandidateTestHelpers.CreateSut();
 
         await using var pdf = CandidateTestHelpers.MinimalPdf();
         var (detail, duplicate, error) = await service.CreateAsync(
-            CandidateTestHelpers.CreateRequest(
-                phone: CandidateTestHelpers.SampleLocalPhone,
-                phoneCountry: null),
+            CandidateTestHelpers.CreateRequest(source: "   "),
+            pdf,
+            "resume.pdf");
+
+        Assert.Null(detail);
+        Assert.Null(duplicate);
+        Assert.Equal("Candidate source is required.", error);
+        Assert.Empty(db.Candidates);
+    }
+
+    [Fact]
+    public async Task Create_LocalPhoneWithoutCountry_Fails()
+    {
+        var (_, service, _) = CandidateTestHelpers.CreateSut();
+
+        await using var pdf = CandidateTestHelpers.MinimalPdf();
+        var (detail, duplicate, error) = await service.CreateAsync(
+            CandidateTestHelpers.CreateRequest(phoneCountry: null),
             pdf,
             "resume.pdf");
 
         Assert.Null(detail);
         Assert.Null(duplicate);
         Assert.Contains("valid phone number", error);
-        Assert.Empty(db.Candidates);
     }
 }

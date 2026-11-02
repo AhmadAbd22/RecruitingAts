@@ -37,3 +37,9 @@ Thumbs.db
 *.local.md
 DOMAIN_DECISIONS.local.md
 
+# Private deployment files, local demo data and generated website assets
+/.local-deploy/
+/.local-demo/
+/backend/wwwroot/
+*.publishSettings
+

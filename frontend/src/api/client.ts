@@ -19,7 +19,15 @@ export const api = axios.create({
 })
 
 /** FormData must keep multipart boundary — never force application/json. */
-api.interceptors.request.use((config) => {
+api.interceptors.request.use(async (config) => {
+  const method = config.method?.toUpperCase() ?? 'GET'
+  if (!['GET', 'HEAD', 'OPTIONS', 'TRACE'].includes(method)) {
+    // A fresh token also handles signing in or out as a different user.
+    const { data } = await axios.get<{ token: string }>('/api/auth/csrf', {
+      withCredentials: true,
+    })
+    config.headers.set('X-CSRF-TOKEN', data.token)
+  }
   if (config.data instanceof FormData) {
     const headers = config.headers
     if (headers && typeof headers.delete === 'function') {

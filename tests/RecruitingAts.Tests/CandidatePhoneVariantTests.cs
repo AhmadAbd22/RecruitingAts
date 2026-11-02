@@ -31,7 +31,8 @@ public class CandidatePhoneVariantTests
             CandidateId = Guid.NewGuid(),
             FullName = "Phone Match",
             Email = "phone@example.com",
-            Phone = CandidateTestHelpers.SampleE164Phone
+            Phone = CandidateTestHelpers.SampleE164Phone,
+            Source = "Agency"
         });
         await db.SaveChangesAsync();
 
@@ -49,7 +50,8 @@ public class CandidatePhoneVariantTests
             CandidateId = Guid.NewGuid(),
             FullName = "Phone Match",
             Email = "phone@example.com",
-            Phone = CandidateTestHelpers.SampleE164Phone
+            Phone = CandidateTestHelpers.SampleE164Phone,
+            Source = "Agency"
         });
         await db.SaveChangesAsync();
 
@@ -73,5 +75,6 @@ public class CandidatePhoneVariantTests
             phone: CandidateTestHelpers.SampleE164Phone);
 
         Assert.True(result.IsDuplicate);
+        Assert.Equal(CandidateTestHelpers.SampleLocalPhone, result.Matches[0].Phone);
     }
 }

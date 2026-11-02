@@ -1,0 +1,94 @@
+name: Test and deploy Recruiting ATS
+
+on:
+  push:
+    branches: [deploy/monsterasp]
+  pull_request:
+    branches: [deploy/monsterasp]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: monsterasp-${{ github.event_name == 'pull_request' && github.head_ref || 'production' }}
+  cancel-in-progress: false
+
+jobs:
+  test-and-deploy:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: |
+            9.0.x
+            10.0.x
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Test backend rules
+        shell: pwsh
+        run: |
+          dotnet test tests/RecruitingAts.Tests/RecruitingAts.Tests.csproj -c Release
+          if ($LASTEXITCODE -ne 0) { throw 'Backend tests failed.' }
+          dotnet test RecruitingAts.Tests/RecruitingAts.Tests.csproj -c Release
+          if ($LASTEXITCODE -ne 0) { throw 'Requisition tests failed.' }
+
+      - name: Publish API and React together
+        run: dotnet publish backend/RecruitingAts.Api.csproj -c Release -r win-x86 --self-contained false -o publish
+
+      - name: Check frontend
+        working-directory: frontend
+        run: npm run lint
+
+      - name: Check published website
+        shell: pwsh
+        run: |
+          foreach ($file in 'RecruitingAts.Api.dll', 'web.config', 'wwwroot/index.html') {
+            if (!(Test-Path "publish/$file")) { throw "Publish output is missing $file" }
+          }
+
+      # Pull requests only build/test. Only this deployment branch updates the site.
+      - name: Deploy to MonsterASP.NET
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/deploy/monsterasp'
+        shell: pwsh
+        env:
+          WEBSITE_NAME: ${{ secrets.WEBSITE_NAME }}
+          SERVER_COMPUTER_NAME: ${{ secrets.SERVER_COMPUTER_NAME }}
+          SERVER_USERNAME: ${{ secrets.SERVER_USERNAME }}
+          SERVER_PASSWORD: ${{ secrets.SERVER_PASSWORD }}
+        run: |
+          foreach ($name in 'WEBSITE_NAME', 'SERVER_COMPUTER_NAME', 'SERVER_USERNAME', 'SERVER_PASSWORD') {
+            if (![Environment]::GetEnvironmentVariable($name)) {
+              throw "Add the $name repository Actions secret from MonsterASP.NET's Deploy page."
+            }
+          }
+          $msdeploy = "${env:ProgramFiles(x86)}/IIS/Microsoft Web Deploy V3/msdeploy.exe"
+          if (!(Test-Path $msdeploy)) { throw 'Web Deploy is not installed on this runner.' }
+          $endpoint = $env:SERVER_COMPUTER_NAME.TrimEnd('/') + '/msdeploy.axd?site=' + [uri]::EscapeDataString($env:WEBSITE_NAME)
+          $source = (Resolve-Path publish).Path
+          $deployArguments = @(
+            '-verb:sync'
+            "-source:contentPath='$source'"
+            "-dest:contentPath='$env:WEBSITE_NAME',computerName='$endpoint',userName='$env:SERVER_USERNAME',password='$env:SERVER_PASSWORD',authType='Basic',includeAcls='False'"
+            '-enableRule:AppOffline'
+            '-enableRule:DoNotDeleteRule'
+            '-skip:Directory=App_Data'
+            '-disableLink:AppPoolExtension'
+            '-disableLink:ContentExtension'
+            '-disableLink:CertificateExtension'
+          )
+          & $msdeploy @deployArguments
+          if ($LASTEXITCODE -ne 0) { throw 'MonsterASP.NET deployment failed. Check the deploy log.' }
+
+      - name: Check live API
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/deploy/monsterasp'
+        shell: pwsh
+        run: |
+          $health = Invoke-RestMethod 'https://recruiting-ats.runasp.net/api/health' -TimeoutSec 60
+          if ($health.status -ne 'ok') { throw 'The deployed API health check failed.' }

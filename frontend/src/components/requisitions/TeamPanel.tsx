@@ -65,8 +65,8 @@ export function TeamPanel({
   }
 
   return (
-    <section className="panel">
-      <div className="row between">
+    <section className="panel requisition-team-panel">
+      <div className="requisition-team-header">
         <h2>Team</h2>
         {canManage ? (
           <Button variant="primary" onClick={openAddDialog}>
@@ -74,15 +74,18 @@ export function TeamPanel({
           </Button>
         ) : null}
       </div>
-      <ul className="plain-list">
+      <ul className="plain-list requisition-team-list">
         {members.map((m) => (
-          <li key={m.requisitionTeamMemberId} className="row between">
-            <span>
-              {m.employeeName} <span className="chip chip-neutral">{m.teamRole}</span>
+          <li key={m.requisitionTeamMemberId} className="requisition-team-member">
+            <span className="requisition-team-person">
+              <span>{m.employeeName}</span>
+              <span className="chip chip-neutral">{m.teamRole}</span>
             </span>
             {canManage && m.teamRole !== 'Owner' ? (
               <Button
                 variant="ghost"
+                className="requisition-team-remove"
+                aria-label={`Remove ${m.employeeName}`}
                 onClick={() => setRemoveTarget(m)}
                 disabled={removePending}
               >

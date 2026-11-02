@@ -6,6 +6,7 @@ import { usePermission } from '../../auth/usePermission'
 import { PanelPicker } from '../../components/interviews'
 import type { PanelCandidate } from '../../components/interviews'
 import { Button, EmptyState, PageHeader } from '../../components/shared'
+import { DateField } from '../../components/shared/DateField'
 import type { ApplicationPipelineItemDto, TeamMember } from '../../types/domain'
 import { getInterviewError } from './interviewHelpers'
 import './interviews.css'
@@ -23,7 +24,10 @@ export function ScheduleInterviewPage() {
 
   const [interviewType, setInterviewType] = useState('Technical')
   const [mode, setMode] = useState('Video')
-  const [when, setWhen] = useState('')
+  const [interviewDate, setInterviewDate] = useState('')
+  const [interviewTime, setInterviewTime] = useState('')
+  const when = interviewDate && interviewTime ? `${interviewDate}T${interviewTime}` : ''
+  const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone.replace(/_/g, ' ')
   const [loading, setLoading] = useState(true)
   const [panelLoading, setPanelLoading] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -160,7 +164,8 @@ export function ScheduleInterviewPage() {
       })
 
       setApplicationId('')
-      setWhen('')
+      setInterviewDate('')
+      setInterviewTime('')
       setMessage('Interview scheduled. Assigned panel members can find it in My interviews.')
     } catch (error) {
       setError(getInterviewError(error))
@@ -248,11 +253,21 @@ export function ScheduleInterviewPage() {
                     <option>Phone</option>
                   </select>
                 </label>
-                <label className="field interview-full-width">
-                  <span>Date and time (your local time) <span className="interview-required" aria-hidden="true">*</span></span>
-                  <input required type="datetime-local" value={when}
-                    onChange={(event) => setWhen(event.target.value)} />
-                </label>
+                <div className="interview-date-time interview-full-width">
+                  <div className="interview-fields-grid">
+                    <DateField label="Interview date" value={interviewDate} required onChange={setInterviewDate} />
+                    <label className="field">
+                      <span>Start time <span className="interview-required" aria-hidden="true">*</span></span>
+                      <input required type="time" value={interviewTime} aria-describedby="interview-date-help"
+                        onChange={(event) => setInterviewTime(event.target.value)} />
+                    </label>
+                  </div>
+                  <p id="interview-date-help" className="interview-date-preview" aria-live="polite">
+                    {when ? <strong>{new Date(when).toLocaleString(undefined, { dateStyle: 'full', timeStyle: 'short' })}</strong>
+                      : 'Choose a calendar date and a start time.'}
+                    <span className="interview-timezone">Your local time zone: {timeZone}.</span>
+                  </p>
+                </div>
               </div>
             </section>
 

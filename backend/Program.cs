@@ -1,14 +1,34 @@
 using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using RecruitingAts.Api.Auth;
 using RecruitingAts.Api.Data;
+using RecruitingAts.Api.Middleware;
 using RecruitingAts.Api.Services;
 using RecruitingAts.Api.Storage;
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Services.AddControllers()
+builder.Services.AddAntiforgery(options => options.HeaderName = "X-CSRF-TOKEN");
+// Includes the framework services required by the antiforgery filter.
+// Endpoints still return JSON to React; no Razor views are used.
+builder.Services.AddControllersWithViews(options =>
+    options.Filters.Add(new AutoValidateAntiforgeryTokenAttribute()))
+    .ConfigureApiBehaviorOptions(options =>
+    {
+        options.InvalidModelStateResponseFactory = context =>
+        {
+            var problem = new ValidationProblemDetails(context.ModelState)
+            {
+                Status = StatusCodes.Status400BadRequest
+            };
+            problem.Extensions["message"] = problem.Errors.Values
+                .SelectMany(errors => errors)
+                .FirstOrDefault() ?? "Please check the submitted values.";
+            return new BadRequestObjectResult(problem);
+        };
+    })
     .AddJsonOptions(options =>
     {
         options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter());
@@ -21,7 +41,11 @@ builder.Services.AddOpenApi();
 builder.Services.AddSwaggerGen();
 
 builder.Services.AddDbContext<AppDbContext>(options =>
-    options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
+    {
+        options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection"));
+
+        options.EnableSensitiveDataLogging(false);
+    });
 
 builder.Services
     .AddIdentity<ApplicationUser, IdentityRole>(options =>
@@ -83,8 +107,12 @@ builder.Services.AddScoped<CandidateService>();
 builder.Services.AddScoped<ApplicationService>();
 
 builder.Services.AddScoped<InterviewService>();
+builder.Services.AddScoped<PipelineStageService>();
+builder.Services.AddScoped<CompensationAuditService>();
 
 var app = builder.Build();
+
+app.UseMiddleware<ApiExceptionMiddleware>();
 
 await DbSeeder.SeedAsync(app.Services);
 
@@ -102,10 +130,14 @@ if (!app.Environment.IsDevelopment())
     app.UseHttpsRedirection();
 }
 
+app.UseDefaultFiles();
+app.UseStaticFiles();
+
 app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
+app.MapFallbackToFile("index.html");
 
 app.Run();
 

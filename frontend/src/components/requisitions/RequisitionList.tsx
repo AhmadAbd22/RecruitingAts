@@ -15,12 +15,14 @@ export function RequisitionList({ items, showBudget = false, onSelect }: Requisi
       rows={items}
       rowKey={(r) => r.requisitionId}
       onRowClick={onSelect ? (r) => onSelect(r.requisitionId) : undefined}
-      emptyMessage="No requisitions in scope."
+      emptyMessage="No requisitions match your filters. Try another title or status."
       columns={[
         {
           key: 'title',
           header: 'Title',
-          render: (r) => <strong>{r.title}</strong>,
+          render: (r) => onSelect ? <button className="management-title-link" onClick={(event) => {
+            event.stopPropagation(); onSelect(r.requisitionId)
+          }}>{r.title}</button> : <strong>{r.title}</strong>,
         },
         { key: 'department', header: 'Dept', render: (r) => r.department },
         {
@@ -34,7 +36,7 @@ export function RequisitionList({ items, showBudget = false, onSelect }: Requisi
           header: 'Budget',
           render: (r) =>
             showBudget
-              ? `${r.budgetMin ?? '—'} – ${r.budgetMax ?? '—'}`
+              ? r.budgetMin == null && r.budgetMax == null ? 'Not set' : `${r.budgetMin?.toLocaleString() ?? 'Not set'} - ${r.budgetMax?.toLocaleString() ?? 'Not set'}`
               : 'Hidden',
         },
       ]}

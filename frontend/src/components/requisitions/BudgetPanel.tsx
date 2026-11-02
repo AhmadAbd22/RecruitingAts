@@ -19,7 +19,8 @@ export function BudgetPanel({
       <h2>Compensation</h2>
       {canView ? (
         <p>
-          {budgetMin ?? '—'} – {budgetMax ?? '—'}
+          {budgetMin == null && budgetMax == null ? 'Budget has not been set.' :
+            `${budgetMin?.toLocaleString() ?? 'Not set'} - ${budgetMax?.toLocaleString() ?? 'Not set'}`}
         </p>
       ) : (
         <p className="chip chip-warn">
@@ -31,7 +32,6 @@ export function BudgetPanel({
           Edit budget
         </button>
       ) : null}
-      {/* TODO: PUT budget + audit on view */}
     </section>
   )
 }

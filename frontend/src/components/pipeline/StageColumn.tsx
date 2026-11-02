@@ -15,7 +15,7 @@ export type StageColumnProps = {
 export function StageColumn({
   stageId,
   stageName,
-  stageColor = '#64748b',
+  stageColor = '#087d6d',
   applications,
   selectedApplicationId,
   onSelectApplication,
@@ -27,11 +27,11 @@ export function StageColumn({
           <span className="rail" style={{ background: stageColor }} />
           {stageName}
         </h2>
-        <span className="count">{applications.length}</span>
+        <span className="count" aria-label={`${applications.length} applications in ${stageName}`}>{applications.length}</span>
       </header>
       <div className="stage-column-body">
         {applications.length === 0 ? (
-          <EmptyState title="Empty" message="No applications" />
+          <EmptyState title="No applications yet" message="Applications moved here will appear in this stage." />
         ) : (
           applications.map((a) => (
             <ApplicationCard

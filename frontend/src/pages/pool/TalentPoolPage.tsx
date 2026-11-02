@@ -10,6 +10,7 @@ import {
 import { usePermission } from '../../auth/usePermission'
 
 import type { CandidateFormValues } from '../../components/candidates'
+import { DateField } from '../../components/shared/DateField'
 import type {
   CandidateListItem,
 } from '../../types/domain'
@@ -525,10 +526,7 @@ export function TalentPoolPage() {
                   <option>Referral</option><option>LinkedIn</option><option>Career site</option><option>Agency</option>
                 </select>
               </label>
-              <label className="field">
-                Consent date (optional)
-                <input type="date" value={consentDate} onChange={(event) => setConsentDate(event.target.value)} />
-              </label>
+              <DateField label="Consent date (optional)" value={consentDate} onChange={setConsentDate} />
             </fieldset>
               <label className="field pool-span-full pool-upload">
                 <span>PDF resume <span className="pool-required" aria-hidden="true">*</span></span>

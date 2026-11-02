@@ -70,11 +70,14 @@ public class CompensationTests
         Assert.Equal(nameof(RecruitingAts.Api.Data.Entities.Requisition), log.EntityType);
         Assert.Equal(reqId.ToString(), log.EntityId);
 
-        // List does not audit individual compensation views.
+        // Each budget exposed by the list is also a compensation view.
         db.AuditLogs.RemoveRange(db.AuditLogs);
         await db.SaveChangesAsync();
         await service.ListAsync(user);
-        Assert.Empty(await db.AuditLogs.ToListAsync());
+        var listLog = Assert.Single(await db.AuditLogs.ToListAsync());
+        Assert.Equal("comp-viewer", listLog.UserId);
+        Assert.Equal("CompensationViewed", listLog.Action);
+        Assert.Equal(reqId.ToString(), listLog.EntityId);
     }
 
     private static async Task<(AppDbContext Db, Guid ReqId)> SeedWithBudgetAsync()

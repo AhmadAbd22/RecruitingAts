@@ -32,6 +32,7 @@ export function StageMoveDrawer({
   open,
   candidateName = 'Candidate',
   candidateEmail,
+  currentStageId,
   currentStageIsTerminal = false,
   stages,
   dispositionReason,
@@ -48,6 +49,8 @@ export function StageMoveDrawer({
   stagesError,
   onRetryStages,
 }: StageMoveDrawerProps) {
+  const currentStageName = stages.find((stage) => stage.pipelineStageId === currentStageId)?.name
+
   return (
     <Drawer
       open={open}
@@ -70,8 +73,10 @@ export function StageMoveDrawer({
         </>
       }
     >
-      <div className="field">
-        <span className="muted">{candidateEmail?.trim() || 'Email unavailable'}</span>
+      <div className="pipeline-move-context">
+        <strong>Update this candidate's application</strong>
+        <p>{candidateEmail?.trim() || 'Email unavailable'}</p>
+        {currentStageName && <span className="pipeline-current-stage">Current stage: <strong>{currentStageName}</strong></span>}
       </div>
       {stagesLoading ? (
         <div className="empty-state" role="status">Loading active stages…</div>
@@ -123,7 +128,7 @@ export function StageMoveDrawer({
           ) : null}
         </>
       )}
-      {error ? <p className="error">{error}</p> : null}
+      {error ? <p className="error" role="alert">{error}</p> : null}
     </Drawer>
   )
 }

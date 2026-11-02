@@ -173,7 +173,7 @@ public class ApplicationCreateTests
         await db.SaveChangesAsync();
 
         var user = ViewAllUser();
-        var service = new ApplicationService(db, new RequisitionScopeService(db));
+        var service = new ApplicationService(db, new RequisitionScopeService(db), new AuditService(db));
         return (db, service, user, candidateId, requisitionId, applied.PipelineStageId);
     }
 

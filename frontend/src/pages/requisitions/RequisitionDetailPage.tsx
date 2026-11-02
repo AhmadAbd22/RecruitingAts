@@ -26,6 +26,8 @@ import {
 import { Button, EmptyState, Modal, PageHeader, StatusChip } from '../../components/shared'
 import type { RequisitionDetail } from '../../types/domain'
 import type { EmployeeListItem } from '../../types/domain'
+import { Link } from 'react-router-dom'
+import '../management.css'
 
 /** Owner: Amina (+ team panel: Abdul-Manan) */
 export function RequisitionDetailPage() {
@@ -171,28 +173,31 @@ export function RequisitionDetailPage() {
   }
 
   const owner = requisition.team.find((member) => member.teamRole === 'Owner')
-  const canViewCompensation = can(Permissions.CompensationView)
-  const canEditCompensation = can(Permissions.CompensationEdit) && canViewCompensation
+  const canViewCompensation = can(Permissions.CompensationView) || can(Permissions.CompensationEdit)
+  const canEditCompensation = can(Permissions.CompensationEdit)
 
   return (
-    <div className="page">
+    <div className="page management-page">
       <PageHeader
         title={requisition.title}
         subtitle={requisition.department}
         actions={<StatusChip status={requisition.status} />}
       />
-      <section className="panel stack">
+      <Link className="btn btn-ghost" to="/requisitions">← Back to requisitions</Link>
+      <section className="panel">
         <h2>Requisition information</h2>
-        <p><strong>Department:</strong> {requisition.department}</p>
-        <p><strong>Employment type:</strong> {requisition.employmentType}</p>
-        <p><strong>Seniority:</strong> {requisition.seniority}</p>
-        <p><strong>Skills:</strong> {requisition.skills}</p>
-        <p><strong>Hiring manager:</strong> {requisition.hiringManagerName}</p>
-        <p><strong>Owner:</strong> {owner?.employeeName ?? 'Not provided by API'}</p>
+        <dl className="management-details">
+          <div><dt>Department</dt><dd>{requisition.department}</dd></div>
+          <div><dt>Employment type</dt><dd>{requisition.employmentType}</dd></div>
+          <div><dt>Seniority</dt><dd>{requisition.seniority}</dd></div>
+          <div><dt>Skills</dt><dd>{requisition.skills}</dd></div>
+          <div><dt>Hiring manager</dt><dd>{requisition.hiringManagerName}</dd></div>
+          <div><dt>Owner</dt><dd>{owner?.employeeName ?? 'Not recorded'}</dd></div>
+        </dl>
         {requisition.statusReason ? (
           <p><strong>Status reason:</strong> {requisition.statusReason}</p>
         ) : null}
-        <div>
+        <div className="management-job-description">
           <strong>Job description</strong>
           <p>{requisition.jobDescription}</p>
         </div>
@@ -200,6 +205,7 @@ export function RequisitionDetailPage() {
       <div className="grid-2">
         <section className="panel">
           <h2>Workflow</h2>
+          <p className="muted management-hint">Draft → Admin approval → Published. Only published jobs accept new applications.</p>
           <StatusActions
             status={requisition.status}
             canManage={can(Permissions.RequisitionsManage)}
@@ -321,7 +327,7 @@ export function RequisitionDetailPage() {
               setFillOpen(true)
             }}
           />
-          {actionMessage ? <p role="status">{actionMessage}</p> : null}
+          {actionMessage ? <p className="management-notice management-success" role="status">{actionMessage}</p> : null}
           {actionError ? <p className="error" role="alert">{actionError}</p> : null}
         </section>
         <BudgetPanel

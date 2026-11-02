@@ -16,7 +16,7 @@ export function StageCatalogTable({ stages, onRename, onDelete }: StageCatalogTa
       rowKey={(s) => s.pipelineStageId}
       emptyMessage="No stages configured."
       columns={[
-        { key: 'order', header: 'Order', render: (s) => s.sortOrder },
+        { key: 'order', header: 'Order', render: (s) => <span className="stage-order">{s.sortOrder}</span> },
         { key: 'name', header: 'Name', render: (s) => <strong>{s.name}</strong> },
         {
           key: 'type',
@@ -35,11 +35,11 @@ export function StageCatalogTable({ stages, onRename, onDelete }: StageCatalogTa
           header: '',
           render: (s) =>
             s.isReserved ? (
-              <span className="muted">Locked</span>
+              <span className="stage-locked"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><rect x="5" y="10" width="14" height="11" rx="2" /><path d="M8 10V7a4 4 0 0 1 8 0v3" /></svg>Locked</span>
             ) : (
               <div className="row">
-                <Button onClick={() => onRename?.(s.pipelineStageId)}>Rename</Button>
-                <Button variant="warn" onClick={() => onDelete?.(s.pipelineStageId)}>
+                <Button onClick={() => onRename?.(s.pipelineStageId)}>Edit</Button>
+                <Button variant="danger" onClick={() => onDelete?.(s.pipelineStageId)}>
                   Delete
                 </Button>
               </div>
