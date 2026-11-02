@@ -10,6 +10,7 @@ public interface IRequisitionService
     Task<(RequisitionDetail? Detail, string? Error)> SubmitForApprovalAsync(Guid id, ClaimsPrincipal user, CancellationToken cancellationToken = default);
     Task<(RequisitionDetail? Detail, string? Error)> ApproveAsync(Guid id, ClaimsPrincipal user, CancellationToken cancellationToken = default);
     Task<(RequisitionDetail? Detail, string? Error)> PublishAsync(Guid id, ClaimsPrincipal user, CancellationToken cancellationToken = default);
+    Task<(RequisitionDetail? Detail, string? Error)> RepublishAsync(Guid id, ClaimsPrincipal user, CancellationToken cancellationToken = default);
     Task<(RequisitionDetail? Detail, string? Error)> RejectAsync(Guid id, string reason, ClaimsPrincipal user, CancellationToken cancellationToken = default);
     Task<(RequisitionDetail? Detail, string? Error)> ChangeStatusAsync(Guid id, string newStatus, string? reason, ClaimsPrincipal user, CancellationToken cancellationToken = default);
     Task<(RequisitionDetail? Detail, string? Error)> UpdateBudgetAsync(Guid id, decimal? budgetMin, decimal? budgetMax, ClaimsPrincipal user, CancellationToken cancellationToken = default);

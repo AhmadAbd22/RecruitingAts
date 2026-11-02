@@ -137,6 +137,11 @@ export async function publishRequisition(requisitionId: string) {
   return data
 }
 
+export async function republishRequisition(requisitionId: string) {
+  const { data } = await api.post<RequisitionDetail>(`/requisitions/${requisitionId}/republish`)
+  return data
+}
+
 export async function holdRequisition(requisitionId: string, reason: string) {
   const { data } = await api.post<RequisitionDetail>(`/requisitions/${requisitionId}/hold`, {
     reason,
@@ -201,6 +206,48 @@ export async function removeRequisitionTeamMember(
 
 export async function createRequisition(request: CreateRequisitionRequest) {
   const { data } = await api.post<CreateRequisitionResponse>('/requisitions', request)
+  return data
+}
+
+export type PipelineStageAdmin = {
+  pipelineStageId: string
+  name: string
+  sortOrder: number
+  isReserved: boolean
+  isTerminal: boolean
+  isActive: boolean
+}
+
+export async function listAdminPipelineStages() {
+  const { data } = await api.get<PipelineStageAdmin[]>('/pipeline-stages')
+  return data
+}
+
+export async function createWorkingPipelineStage(name: string, sortOrder: number) {
+  const { data } = await api.post<PipelineStageAdmin>('/pipeline-stages', { name, sortOrder })
+  return data
+}
+
+export async function renamePipelineStage(pipelineStageId: string, name: string) {
+  const { data } = await api.patch<PipelineStageAdmin>(`/pipeline-stages/${pipelineStageId}`, {
+    name,
+  })
+  return data
+}
+
+export async function setPipelineStageActive(pipelineStageId: string, isActive: boolean) {
+  const { data } = await api.patch<PipelineStageAdmin>(
+    `/pipeline-stages/${pipelineStageId}/active`,
+    { isActive },
+  )
+  return data
+}
+
+export async function updateInterviewStatus(
+  interviewId: string,
+  status: 'Completed' | 'NoShow',
+) {
+  const { data } = await api.patch(`/interviews/${interviewId}/status`, { status })
   return data
 }
 

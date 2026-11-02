@@ -67,6 +67,7 @@ export type CreateRequisitionRequest = {
   seniority: string
   skills: string
   jobDescription: string
+  openings: number
 }
 
 export type CreateRequisitionResponse = RequisitionListItem & {
@@ -136,7 +137,9 @@ export type PipelineStage = {
   sortOrder: number
   color?: string
   isReserved?: boolean
+  isTerminal?: boolean
   terminal?: boolean
+  isActive?: boolean
 }
 
 export type InterviewListItem = {

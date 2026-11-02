@@ -12,6 +12,7 @@ import {
   holdRequisition,
   Permissions,
   publishRequisition,
+  republishRequisition,
   rejectRequisition,
   removeRequisitionTeamMember,
   submitRequisition,
@@ -44,6 +45,7 @@ export function RequisitionDetailPage() {
   const [rejectReason, setRejectReason] = useState('')
   const [rejectValidationError, setRejectValidationError] = useState<string | null>(null)
   const [publishPending, setPublishPending] = useState(false)
+  const [republishPending, setRepublishPending] = useState(false)
   const [holdPending, setHoldPending] = useState(false)
   const [holdOpen, setHoldOpen] = useState(false)
   const [holdReason, setHoldReason] = useState('')
@@ -186,6 +188,7 @@ export function RequisitionDetailPage() {
         <p><strong>Department:</strong> {requisition.department}</p>
         <p><strong>Employment type:</strong> {requisition.employmentType}</p>
         <p><strong>Seniority:</strong> {requisition.seniority}</p>
+        <p><strong>Openings:</strong> {requisition.openings}</p>
         <p><strong>Skills:</strong> {requisition.skills}</p>
         <p><strong>Hiring manager:</strong> {requisition.hiringManagerName}</p>
         <p><strong>Owner:</strong> {owner?.employeeName ?? 'Not provided by API'}</p>
@@ -208,6 +211,7 @@ export function RequisitionDetailPage() {
             approvePending={approvePending}
             rejectPending={rejectPending}
             publishPending={publishPending}
+            republishPending={republishPending}
             holdPending={holdPending}
             closePending={closePending}
             cancelPending={cancelPending}
@@ -270,6 +274,33 @@ export function RequisitionDetailPage() {
               setRejectValidationError(null)
               setActionError(null)
               setRejectOpen(true)
+            }}
+            onRepublish={async () => {
+              if (!id || republishPending) return
+
+              setRepublishPending(true)
+              setActionMessage(null)
+              setActionError(null)
+
+              try {
+                await republishRequisition(id)
+                const refreshed = await getRequisition(id)
+                setRequisition(refreshed)
+                setActionMessage('Requisition moved back to published.')
+              } catch (cause) {
+                if (axios.isAxiosError<{ message?: string }>(cause)) {
+                  setActionError(
+                    cause.response?.data?.message ??
+                      'Unable to move the requisition back to published.',
+                  )
+                } else if (cause instanceof Error) {
+                  setActionError(cause.message)
+                } else {
+                  setActionError('Unable to move the requisition back to published.')
+                }
+              } finally {
+                setRepublishPending(false)
+              }
             }}
             onPublish={async () => {
               if (!id || publishPending) return

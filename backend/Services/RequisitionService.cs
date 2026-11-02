@@ -235,6 +235,31 @@ public class RequisitionService(
         return (await GetAsync(id, user, cancellationToken), null);
     }
 
+    public async Task<(RequisitionDetail? Detail, string? Error)> RepublishAsync(
+        Guid id,
+        ClaimsPrincipal user,
+        CancellationToken cancellationToken = default)
+    {
+        var (req, error) = await LoadForManageAsync(id, user, cancellationToken);
+        if (error is not null || req is null)
+        {
+            return (null, error);
+        }
+
+        if (req.Status != RequisitionStatuses.OnHold)
+        {
+            return (null, "Only OnHold requisitions can be moved back to Published.");
+        }
+
+        req.Status = RequisitionStatuses.Published;
+        req.StatusReason = null;
+        req.UpdatedAt = DateTime.UtcNow;
+        await db.SaveChangesAsync(cancellationToken);
+
+        await AuditStatusAsync(user, req, "Republished", cancellationToken);
+        return (await GetAsync(id, user, cancellationToken), null);
+    }
+
     public async Task<(RequisitionDetail? Detail, string? Error)> RejectAsync(
         Guid id,
         string reason,

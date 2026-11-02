@@ -25,6 +25,7 @@ export function RequisitionsListPage() {
     seniority: 'Mid',
     skills: '',
     jobDescription: '',
+    openings: 1,
   })
   const [createError, setCreateError] = useState<string | null>(null)
   const [createPending, setCreatePending] = useState(false)
@@ -126,8 +127,18 @@ export function RequisitionsListPage() {
                 seniority: form.seniority,
                 skills: form.skills.trim(),
                 jobDescription: form.jobDescription.trim(),
+                openings: Math.max(1, form.openings || 1),
               })
               setOpen(false)
+              setForm({
+                title: '',
+                department: '',
+                employmentType: 'FullTime',
+                seniority: 'Mid',
+                skills: '',
+                jobDescription: '',
+                openings: 1,
+              })
               setCreateError(null)
               setRetryAttempt((attempt) => attempt + 1)
             } catch (cause) {

@@ -81,6 +81,7 @@ builder.Services.AddScoped<IRequisitionService, RequisitionService>();
 
 builder.Services.AddScoped<CandidateService>();
 builder.Services.AddScoped<ApplicationService>();
+builder.Services.AddScoped<PipelineStageService>();
 
 builder.Services.AddScoped<InterviewService>();
 

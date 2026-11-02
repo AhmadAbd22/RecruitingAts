@@ -4,11 +4,11 @@ import { DataTable, StatusChip, Button } from '../shared'
 export type StageCatalogTableProps = {
   stages: PipelineStage[]
   onRename?: (pipelineStageId: string) => void
-  onDelete?: (pipelineStageId: string) => void
+  onDeactivate?: (pipelineStageId: string) => void
 }
 
-/** Owner: Amina — FR-ATS-003 (API gap for CRUD). */
-export function StageCatalogTable({ stages, onRename, onDelete }: StageCatalogTableProps) {
+/** Owner: Amina — FR-ATS-003 stage catalog. */
+export function StageCatalogTable({ stages, onRename, onDeactivate }: StageCatalogTableProps) {
   const sorted = [...stages].sort((a, b) => a.sortOrder - b.sortOrder)
   return (
     <DataTable
@@ -24,11 +24,16 @@ export function StageCatalogTable({ stages, onRename, onDelete }: StageCatalogTa
           render: (s) =>
             s.isReserved ? (
               <StatusChip status="Reserved" />
-            ) : s.terminal ? (
+            ) : s.isTerminal || s.terminal ? (
               <StatusChip status="Terminal" tone="warn" />
             ) : (
               <StatusChip status="Working" tone="ok" />
             ),
+        },
+        {
+          key: 'active',
+          header: 'Active',
+          render: (s) => (s.isActive === false ? 'No' : 'Yes'),
         },
         {
           key: 'actions',
@@ -39,8 +44,8 @@ export function StageCatalogTable({ stages, onRename, onDelete }: StageCatalogTa
             ) : (
               <div className="row">
                 <Button onClick={() => onRename?.(s.pipelineStageId)}>Rename</Button>
-                <Button variant="warn" onClick={() => onDelete?.(s.pipelineStageId)}>
-                  Delete
+                <Button variant="warn" onClick={() => onDeactivate?.(s.pipelineStageId)}>
+                  {s.isActive === false ? 'Activate' : 'Deactivate'}
                 </Button>
               </div>
             ),

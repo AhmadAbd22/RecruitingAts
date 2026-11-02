@@ -46,11 +46,6 @@ export function AppShell() {
       label: 'Stages',
       show: can(Permissions.StagesManage),
     },
-    {
-      to: '/audit',
-      label: 'Comp audit',
-      show: can(Permissions.CompensationView),
-    },
   ]
 
   return (

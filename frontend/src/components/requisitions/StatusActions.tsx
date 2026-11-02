@@ -21,6 +21,7 @@ export type StatusActionsProps = {
   onFill?: () => void
   fillPending?: boolean
   onRepublish?: () => void
+  republishPending?: boolean
 }
 
 /** Owner: Amina — requisition workflow buttons by status. */
@@ -45,6 +46,7 @@ export function StatusActions({
   onFill,
   fillPending = false,
   onRepublish,
+  republishPending = false,
 }: StatusActionsProps) {
   return (
     <div className="row wrap">
@@ -86,11 +88,8 @@ export function StatusActions({
       ) : null}
       {canManage && status === 'OnHold' ? (
         <>
-          <Button variant="primary" onClick={onRepublish}>
-            Back to published
-          </Button>
-          <Button onClick={onHold} disabled={holdPending}>
-            {holdPending ? 'Holding…' : 'Hold'}
+          <Button variant="primary" onClick={onRepublish} disabled={republishPending}>
+            {republishPending ? 'Publishing…' : 'Back to published'}
           </Button>
           <Button onClick={onClose} disabled={closePending}>
             {closePending ? 'Closing…' : 'Close'}
@@ -103,7 +102,6 @@ export function StatusActions({
           </Button>
         </>
       ) : null}
-      {/* TODO: wire status endpoints */}
     </div>
   )
 }

@@ -200,6 +200,71 @@ public class InterviewService(
             .ToListAsync(cancellationToken);
     }
 
+    public async Task<InterviewStatusUpdateResult> UpdateStatusAsync(
+        Guid interviewId,
+        string status,
+        ClaimsPrincipal user,
+        CancellationToken cancellationToken = default)
+    {
+        var allowed = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "Completed",
+            "NoShow"
+        };
+
+        if (!allowed.Contains(status))
+        {
+            return new InterviewStatusUpdateResult(
+                InterviewStatusUpdateStatus.Invalid,
+                "Status must be Completed or NoShow.");
+        }
+
+        var normalized = string.Equals(status, "NoShow", StringComparison.OrdinalIgnoreCase)
+            ? "NoShow"
+            : "Completed";
+
+        var existing = await GetAsync(interviewId, user, cancellationToken);
+        if (existing is null)
+        {
+            return new InterviewStatusUpdateResult(
+                InterviewStatusUpdateStatus.NotFound,
+                "Interview not found or not in your scope.");
+        }
+
+        if (!user.HasClaim(Permissions.ClaimType, Permissions.InterviewsSchedule))
+        {
+            return new InterviewStatusUpdateResult(
+                InterviewStatusUpdateStatus.Forbidden,
+                "Missing INTERVIEWS.SCHEDULE permission.");
+        }
+
+        var interview = await db.Interviews.FirstOrDefaultAsync(
+            i => i.InterviewId == interviewId,
+            cancellationToken);
+        if (interview is null)
+        {
+            return new InterviewStatusUpdateResult(
+                InterviewStatusUpdateStatus.NotFound,
+                "Interview not found or not in your scope.");
+        }
+
+        if (!string.Equals(interview.Status, "Scheduled", StringComparison.OrdinalIgnoreCase))
+        {
+            return new InterviewStatusUpdateResult(
+                InterviewStatusUpdateStatus.Invalid,
+                "Only Scheduled interviews can be marked Completed or NoShow.");
+        }
+
+        interview.Status = normalized;
+        await db.SaveChangesAsync(cancellationToken);
+
+        var refreshed = await GetAsync(interviewId, user, cancellationToken);
+        return new InterviewStatusUpdateResult(
+            InterviewStatusUpdateStatus.Success,
+            $"Interview marked as {normalized}.",
+            refreshed);
+    }
+
     public async Task<InterviewFeedbackResult> SubmitFeedbackAsync(
         Guid interviewId,
         SubmitInterviewFeedbackRequest request,
@@ -421,6 +486,19 @@ public enum InterviewCreateStatus
 
 public record InterviewCreateResult(
     InterviewCreateStatus Status,
+    string? Message = null,
+    InterviewDetail? Interview = null);
+
+public enum InterviewStatusUpdateStatus
+{
+    Success,
+    NotFound,
+    Forbidden,
+    Invalid
+}
+
+public record InterviewStatusUpdateResult(
+    InterviewStatusUpdateStatus Status,
     string? Message = null,
     InterviewDetail? Interview = null);
 

@@ -9,7 +9,6 @@ import {
 
 import { usePermission } from '../../auth/usePermission'
 
-import type { CandidateFormValues } from '../../components/candidates'
 import type {
   CandidateListItem,
 } from '../../types/domain'
@@ -33,6 +32,7 @@ import {
 import type {
   ApiFailure,
   CandidateDetail,
+  CandidateFormValues,
   DuplicateResult,
 } from './candidatePageHelpers'
 

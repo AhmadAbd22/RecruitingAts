@@ -7,6 +7,14 @@ import countryNames from "react-phone-number-input/locale/en";
 
 import type { CandidateListItem } from "../../types/domain";
 
+export type CandidateFormValues = {
+  fullName: string
+  email: string
+  phone: string
+  skills: string
+  source: string
+}
+
 export type CandidateDetail = CandidateListItem & {
   skills: string | null;
   consentDate: string | null;

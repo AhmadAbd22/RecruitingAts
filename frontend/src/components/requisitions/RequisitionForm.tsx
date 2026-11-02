@@ -5,6 +5,7 @@ export type RequisitionFormValues = {
   seniority: string
   skills: string
   jobDescription: string
+  openings: number
 }
 
 export type RequisitionFormProps = {
@@ -86,6 +87,17 @@ export function RequisitionForm({
         <input
           value={values.skills}
           onChange={(e) => set('skills', e.target.value)}
+          required
+          disabled={disabled}
+        />
+      </label>
+      <label className="field">
+        Openings
+        <input
+          type="number"
+          min={1}
+          value={values.openings}
+          onChange={(e) => set('openings', Math.max(1, Number(e.target.value) || 1))}
           required
           disabled={disabled}
         />

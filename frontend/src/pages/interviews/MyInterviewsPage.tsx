@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { api, Permissions } from "../../api/client";
+import { api, Permissions, updateInterviewStatus } from "../../api/client";
 import { useAuth } from "../../auth/AuthContext";
 import { usePermission } from "../../auth/usePermission";
 import type { FeedbackFormValues } from "../../components/interviews";
+import { InterviewStatusActions } from "../../components/interviews";
 import { Button, EmptyState, PageHeader, StatusChip } from "../../components/shared";
 import { InterviewFeedbackDialog } from "./InterviewFeedbackDialog";
 import type { MyInterview } from "./InterviewFeedbackDialog";
@@ -24,6 +25,8 @@ export function MyInterviewsPage() {
   const [interviews, setInterviews] = useState<MyInterview[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [statusError, setStatusError] = useState("");
+  const [statusPendingId, setStatusPendingId] = useState<string | null>(null);
   const [refresh, setRefresh] = useState(0);
   const [filter, setFilter] = useState<"all" | "pending" | "submitted">("all");
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -88,6 +91,12 @@ export function MyInterviewsPage() {
           <p>{error} Select Refresh to try again.</p>
         </div>
       )}
+      {statusError && (
+        <div className="interview-notice interview-notice--error" role="alert">
+          <strong>Could not update interview status</strong>
+          <p>{statusError}</p>
+        </div>
+      )}
 
       {loading ? (
         <div className="interview-loading interview-loading-panel" role="status">
@@ -147,6 +156,49 @@ export function MyInterviewsPage() {
                       <span className="interview-mobile-label">Interview status</span>
                       <StatusChip status={interview.status === "NoShow" ? "No show" : interview.status}
                         tone={interview.status === "NoShow" ? "danger" : undefined} />
+                      {canSchedule ? (
+                        <InterviewStatusActions
+                          interviewId={interview.interviewId}
+                          status={interview.status}
+                          disabled={statusPendingId === interview.interviewId}
+                          onCompleted={async (interviewId) => {
+                            setStatusPendingId(interviewId)
+                            setStatusError("")
+                            try {
+                              await updateInterviewStatus(interviewId, "Completed")
+                              setInterviews((current) =>
+                                current.map((item) =>
+                                  item.interviewId === interviewId
+                                    ? { ...item, status: "Completed" }
+                                    : item,
+                                ),
+                              )
+                            } catch (cause) {
+                              setStatusError(getInterviewError(cause))
+                            } finally {
+                              setStatusPendingId(null)
+                            }
+                          }}
+                          onNoShow={async (interviewId) => {
+                            setStatusPendingId(interviewId)
+                            setStatusError("")
+                            try {
+                              await updateInterviewStatus(interviewId, "NoShow")
+                              setInterviews((current) =>
+                                current.map((item) =>
+                                  item.interviewId === interviewId
+                                    ? { ...item, status: "NoShow" }
+                                    : item,
+                                ),
+                              )
+                            } catch (cause) {
+                              setStatusError(getInterviewError(cause))
+                            } finally {
+                              setStatusPendingId(null)
+                            }
+                          }}
+                        />
+                      ) : null}
                     </div>
                     <div className="interview-row-action">
                       {interview.hasSubmittedFeedback || canAddFeedback ? (
