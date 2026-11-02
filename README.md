@@ -234,7 +234,7 @@ cd backend
 dotnet run --launch-profile http
 ```
 
-API: `http://localhost:5277`
+API: `http://localhost:5277` (Swagger in Development)
 
 **Terminal 2 — React**
 
@@ -243,9 +243,47 @@ cd frontend
 npm run dev
 ```
 
-UI: `http://localhost:5173`
+UI: `http://localhost:5173` (Vite proxies `/api` → `:5277`)
 
 Open the UI, pick a demo account button, log in. You should see **roles** and **permissions** for that user.
+
+### One-origin (production-style) smoke
+
+Build the SPA into `backend/wwwroot`, then run the API as Production so static files + SPA fallback are served from the same host:
+
+```powershell
+cd frontend
+npm run build
+cd ..\backend
+$env:ASPNETCORE_ENVIRONMENT='Production'
+dotnet run --launch-profile http
+```
+
+- UI: `http://localhost:5277/`
+- API: `http://localhost:5277/api/health`
+
+Daily dual-origin Vite + API development does not change.
+
+### Publish (API + UI artifact)
+
+Requires **Node.js LTS** on the machine that publishes (`npm ci` + `npm run build` run automatically):
+
+```powershell
+dotnet publish backend\RecruitingAts.Api.csproj -c Release -o .\publish
+```
+
+Skip the SPA build when needed: `-p:SkipSpaBuild=true`. Deploy the `publish` folder (e.g. Azure App Service).
+
+### Cloud demo deploy (Render free + SQLite)
+
+Azure App Service + Azure SQL remains the intended production path. For a **same-day public demo** when Azure is unavailable, use the included `Dockerfile` + `render.yaml` (SQLite, ephemeral disk; reseeds on cold start):
+
+1. Push `master` to GitHub.
+2. Sign up at [render.com](https://render.com), connect the repo.
+3. **New → Blueprint** and apply `render.yaml`, or **Web Service** with runtime **Docker**, root directory `/`, free plan.
+4. After deploy, open `https://<service>.onrender.com/` (first request may take ~30–60s if the free instance was asleep).
+
+Demo logins still work (`admin@demo.local` / `Pass123!`, etc.).
 
 ---
 

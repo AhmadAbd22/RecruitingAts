@@ -79,6 +79,44 @@ public class InterviewsController(
         return Ok(items);
     }
 
+    public class UpdateInterviewStatusRequest
+    {
+        public string Status { get; set; } = string.Empty;
+    }
+
+    [HttpPatch("{id:guid}/status")]
+    [Authorize(Policy = Permissions.InterviewsSchedule)]
+    public async Task<IActionResult> UpdateStatus(
+        Guid id,
+        [FromBody] UpdateInterviewStatusRequest request,
+        CancellationToken cancellationToken)
+    {
+        var result = await interviews.UpdateStatusAsync(
+            id,
+            request?.Status ?? string.Empty,
+            User,
+            cancellationToken);
+
+        if (result.Status == InterviewStatusUpdateStatus.NotFound)
+        {
+            return NotFound(new { message = result.Message });
+        }
+
+        if (result.Status == InterviewStatusUpdateStatus.Forbidden)
+        {
+            return StatusCode(
+                StatusCodes.Status403Forbidden,
+                new { message = result.Message });
+        }
+
+        if (result.Status == InterviewStatusUpdateStatus.Invalid)
+        {
+            return BadRequest(new { message = result.Message });
+        }
+
+        return Ok(result.Interview);
+    }
+
     [HttpPost("{id:guid}/feedback")]
     [Authorize(Policy = Permissions.InterviewsFeedbackAdd)]
     public async Task<IActionResult> SubmitFeedback(

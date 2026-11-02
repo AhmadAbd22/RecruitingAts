@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using RecruitingAts.Api.Auth;
@@ -7,6 +8,13 @@ using RecruitingAts.Api.Services;
 using RecruitingAts.Api.Storage;
 
 var builder = WebApplication.CreateBuilder(args);
+
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+    options.KnownNetworks.Clear();
+    options.KnownProxies.Clear();
+});
 
 builder.Services.AddControllers()
     .AddJsonOptions(options =>
@@ -20,12 +28,41 @@ builder.Services.AddOpenApi();
 
 builder.Services.AddSwaggerGen();
 
-builder.Services.AddDbContext<AppDbContext>(options =>
-    {
-        options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection"));
+var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
+var provider = builder.Configuration["Database:Provider"];
+var useSqlite =
+    string.Equals(provider, "Sqlite", StringComparison.OrdinalIgnoreCase)
+    || (!string.IsNullOrWhiteSpace(connectionString)
+        && connectionString.Contains("Data Source=", StringComparison.OrdinalIgnoreCase));
 
-        options.EnableSensitiveDataLogging(false);
-    });
+builder.Services.AddDbContext<AppDbContext>(options =>
+{
+    if (useSqlite)
+    {
+        var sqlite =
+            string.IsNullOrWhiteSpace(connectionString)
+                ? "Data Source=App_Data/recruitingats.db"
+                : connectionString;
+        var dataSource = sqlite
+            .Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .FirstOrDefault(part => part.StartsWith("Data Source=", StringComparison.OrdinalIgnoreCase));
+        if (dataSource is not null)
+        {
+            var path = dataSource["Data Source=".Length..].Trim();
+            var dir = Path.GetDirectoryName(path);
+            if (!string.IsNullOrWhiteSpace(dir))
+            {
+                Directory.CreateDirectory(dir);
+            }
+        }
+
+        options.UseSqlite(sqlite);
+    }
+    else
+    {
+        options.UseSqlServer(connectionString);
+    }
+});
 
 builder.Services
     .AddIdentity<ApplicationUser, IdentityRole>(options =>
@@ -85,56 +122,13 @@ builder.Services.AddScoped<IRequisitionService, RequisitionService>();
 
 builder.Services.AddScoped<CandidateService>();
 builder.Services.AddScoped<ApplicationService>();
+builder.Services.AddScoped<PipelineStageService>();
 
 builder.Services.AddScoped<InterviewService>();
 
 var app = builder.Build();
 
-app.Use(async (context, next) =>
-{
-    bool isCandidateRequest =
-        context.Request.Path.StartsWithSegments("/api/candidates");
-
-    if (!isCandidateRequest)
-    {
-        await next();
-        return;
-    }
-
-    try
-    {
-        await next();
-    }
-    catch (Exception error)
-    {
-        if (context.RequestAborted.IsCancellationRequested)
-        {
-            context.Abort();
-            return;
-        }
-
-        app.Logger.LogError(
-            "Candidate request failed. Type: {ErrorType}. Trace ID: {TraceId}",
-            error.GetType().Name,
-            context.TraceIdentifier);
-
-        if (context.Response.HasStarted)
-        {
-            context.Abort();
-            return;
-        }
-
-        context.Response.Clear();
-        context.Response.StatusCode = 500;
-        context.Response.Headers["Cache-Control"] = "no-store";
-
-        await context.Response.WriteAsJsonAsync(new
-        {
-            message = "An unexpected error occurred.",
-            traceId = context.TraceIdentifier
-        });
-    }
-});
+app.UseForwardedHeaders();
 
 await DbSeeder.SeedAsync(app.Services);
 
@@ -147,15 +141,18 @@ if (app.Environment.IsDevelopment())
 
 app.UseCors("FrontendDev");
 
-if (!app.Environment.IsDevelopment())
-{
-    app.UseHttpsRedirection();
-}
+app.UseDefaultFiles();
+app.UseStaticFiles();
 
 app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
+
+if (!app.Environment.IsDevelopment())
+{
+    app.MapFallbackToFile("index.html");
+}
 
 app.Run();
 

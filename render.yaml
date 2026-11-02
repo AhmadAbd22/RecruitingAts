@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: recruiting-ats
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    healthCheckPath: /api/health
+    envVars:
+      - key: ASPNETCORE_ENVIRONMENT
+        value: Production
+      - key: Database__Provider
+        value: Sqlite
+      - key: ConnectionStrings__DefaultConnection
+        value: Data Source=/app/App_Data/recruitingats.db
+      - key: FileStorage__Root
+        value: /app/App_Data/resumes

@@ -93,7 +93,7 @@ public class RequisitionStatusTests
     public async Task Creator_BecomesOwner()
     {
         var db = TestFixture.CreateDb();
-        var hm = TestFixture.AddEmployee(db, "Hiring Manager", "hm@example.com");
+        TestFixture.AddEmployee(db, "Demo Hiring Manager", "manager@demo.local");
         const string creatorUserId = "creator-1";
         var creator = TestFixture.AddEmployee(
             db, "Creator", "creator@example.com", creatorUserId);
@@ -113,8 +113,7 @@ public class RequisitionStatusTests
                 Seniority: "Mid",
                 Skills: "C#",
                 JobDescription: "Build APIs",
-                Openings: 1,
-                HiringManagerEmployeeId: hm.EmployeeId),
+                Openings: 1),
             user);
 
         Assert.Null(error);
