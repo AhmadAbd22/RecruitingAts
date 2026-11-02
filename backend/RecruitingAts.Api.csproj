@@ -11,6 +11,12 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <!-- Vite emptyOutDir deletes wwwroot/.gitkeep; never publish that placeholder. -->
+    <Content Remove="wwwroot\.gitkeep" />
+    <None Include="wwwroot\.gitkeep" Condition="Exists('wwwroot\.gitkeep')" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="libphonenumber-csharp" Version="9.0.41" />
     <PackageReference Include="Microsoft.AspNetCore.Identity.EntityFrameworkCore" Version="9.0.9" />
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="9.0.19" />
@@ -32,6 +38,8 @@
   <Target Name="BuildSpa" BeforeTargets="ComputeFilesToPublish" Condition="'$(SkipSpaBuild)' != 'true'">
     <Exec WorkingDirectory="$(SpaRoot)" Command="npm ci" />
     <Exec WorkingDirectory="$(SpaRoot)" Command="npm run build" />
+    <!-- Restore the git placeholder Vite removed with emptyOutDir. -->
+    <WriteLinesToFile File="$(MSBuildProjectDirectory)\wwwroot\.gitkeep" Lines="" Overwrite="true" />
   </Target>
 
 </Project>

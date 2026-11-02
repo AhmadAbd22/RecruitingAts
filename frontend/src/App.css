@@ -252,6 +252,78 @@ code,
   font-size: 0.9rem;
   color: var(--ink);
   font: inherit;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.field input:hover,
+.field select:hover,
+.field textarea:hover {
+  border-color: color-mix(in srgb, var(--accent) 35%, var(--line));
+}
+
+.field input:focus,
+.field select:focus,
+.field textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 20%, transparent);
+}
+
+.field input:disabled,
+.field select:disabled,
+.field textarea:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  background: color-mix(in srgb, var(--paper) 70%, white);
+}
+
+.field select {
+  appearance: none;
+  -webkit-appearance: none;
+  padding-right: 2.4rem;
+  cursor: pointer;
+  background-color: var(--surface);
+  background-image:
+    linear-gradient(45deg, transparent 50%, var(--muted) 50%),
+    linear-gradient(135deg, var(--muted) 50%, transparent 50%);
+  background-position:
+    calc(100% - 1.05rem) 55%,
+    calc(100% - 0.7rem) 55%;
+  background-size: 6px 6px, 6px 6px;
+  background-repeat: no-repeat;
+}
+
+.field select:focus {
+  background-image:
+    linear-gradient(45deg, transparent 50%, var(--accent-ink) 50%),
+    linear-gradient(135deg, var(--accent-ink) 50%, transparent 50%);
+}
+
+.field input[type='date'],
+.field input[type='datetime-local'],
+.field input[type='time'] {
+  min-height: 40px;
+  cursor: pointer;
+  color-scheme: light;
+  padding-right: 0.55rem;
+}
+
+.field input[type='date']::-webkit-calendar-picker-indicator,
+.field input[type='datetime-local']::-webkit-calendar-picker-indicator,
+.field input[type='time']::-webkit-calendar-picker-indicator {
+  cursor: pointer;
+  opacity: 0.65;
+  padding: 0.2rem;
+  margin-left: 0.25rem;
+  border-radius: 4px;
+  filter: invert(0.35) sepia(0.2) saturate(2) hue-rotate(120deg);
+}
+
+.field input[type='date']::-webkit-calendar-picker-indicator:hover,
+.field input[type='datetime-local']::-webkit-calendar-picker-indicator:hover,
+.field input[type='time']::-webkit-calendar-picker-indicator:hover {
+  opacity: 1;
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
 }
 
 .field textarea {
@@ -686,22 +758,6 @@ a.btn {
 .tabs button.active {
   background: color-mix(in srgb, var(--accent) 15%, white);
   border-color: var(--accent);
-}
-
-.demo-accounts {
-  display: grid;
-  gap: 0.4rem;
-  margin-bottom: 0.85rem;
-}
-
-.demo-accounts button {
-  text-align: left;
-  border: 1px solid var(--line);
-  background: var(--paper);
-  border-radius: var(--radius);
-  padding: 0.55rem 0.7rem;
-  cursor: pointer;
-  font: inherit;
 }
 
 @media (max-width: 900px) {

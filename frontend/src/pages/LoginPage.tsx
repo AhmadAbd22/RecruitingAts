@@ -3,13 +3,6 @@ import { Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
 import { Button } from '../components/shared'
 
-const demoAccounts = [
-  { email: 'admin@demo.local', label: 'Admin' },
-  { email: 'recruiter@demo.local', label: 'Recruiter' },
-  { email: 'manager@demo.local', label: 'Hiring Manager' },
-  { email: 'interviewer@demo.local', label: 'Interviewer' },
-]
-
 /** Owner: Tayyab — auth kickstart (login / register). */
 export function LoginPage() {
   const { user, loading, login, register } = useAuth()
@@ -18,9 +11,9 @@ export function LoginPage() {
   const from = (location.state as { from?: string } | null)?.from || '/'
 
   const [mode, setMode] = useState<'login' | 'register'>('login')
-  const [email, setEmail] = useState('recruiter@demo.local')
-  const [password, setPassword] = useState('Pass123!')
-  const [fullName, setFullName] = useState('Demo Recruiter')
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [fullName, setFullName] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
 
@@ -67,23 +60,6 @@ export function LoginPage() {
             Register
           </button>
         </div>
-
-        {mode === 'login' ? (
-          <div className="demo-accounts">
-            {demoAccounts.map((account) => (
-              <button
-                key={account.email}
-                type="button"
-                onClick={() => {
-                  setEmail(account.email)
-                  setPassword('Pass123!')
-                }}
-              >
-                {account.label}
-              </button>
-            ))}
-          </div>
-        ) : null}
 
         <form className="stack" onSubmit={onSubmit}>
           {mode === 'register' ? (
