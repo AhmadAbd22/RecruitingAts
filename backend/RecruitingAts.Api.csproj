@@ -42,4 +42,15 @@
     <WriteLinesToFile File="$(MSBuildProjectDirectory)\wwwroot\.gitkeep" Lines="" Overwrite="true" />
   </Target>
 
+  <!-- Copy SPA into publish output after publish (StaticWebAssets can omit Vite-generated files). -->
+  <Target Name="CopySpaToPublishDir" AfterTargets="Publish" Condition="'$(PublishDir)' != '' and Exists('$(MSBuildProjectDirectory)\wwwroot\index.html')">
+    <ItemGroup>
+      <_SpaPublishFiles Include="$(MSBuildProjectDirectory)\wwwroot\**\*" Exclude="$(MSBuildProjectDirectory)\wwwroot\.gitkeep" />
+    </ItemGroup>
+    <Copy
+      SourceFiles="@(_SpaPublishFiles)"
+      DestinationFiles="@(_SpaPublishFiles->'$(PublishDir)wwwroot\%(RecursiveDir)%(Filename)%(Extension)')"
+      SkipUnchangedFiles="true" />
+  </Target>
+
 </Project>
