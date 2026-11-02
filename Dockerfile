@@ -1,4 +1,4 @@
-# Multi-stage: Node builds the SPA into wwwroot, then ASP.NET publishes the API.
+# Multi-stage: build SPA into wwwroot first, then publish the API and copy SPA files in.
 FROM mcr.microsoft.com/dotnet/sdk:9.0 AS build
 RUN apt-get update \
     && apt-get install -y --no-install-recommends curl ca-certificates \
@@ -8,9 +8,17 @@ RUN apt-get update \
 
 WORKDIR /src
 COPY . .
+
+WORKDIR /src/frontend
+RUN npm ci && npm run build
+
 WORKDIR /src/backend
 RUN dotnet restore
-RUN dotnet publish RecruitingAts.Api.csproj -c Release -o /app/publish
+RUN dotnet publish RecruitingAts.Api.csproj -c Release -o /app/publish -p:SkipSpaBuild=true
+# Ensure React assets are present even if MSBuild static-web asset inventory skipped them.
+RUN mkdir -p /app/publish/wwwroot \
+    && cp -a /src/backend/wwwroot/. /app/publish/wwwroot/ \
+    && test -f /app/publish/wwwroot/index.html
 
 FROM mcr.microsoft.com/dotnet/aspnet:9.0 AS final
 WORKDIR /app
