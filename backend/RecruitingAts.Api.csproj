@@ -6,6 +6,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <RootNamespace>RecruitingAts.Api</RootNamespace>
     <UserSecretsId>2166c161-98ed-4951-82c4-9fb63041ef7e</UserSecretsId>
+    <SpaRoot>$(MSBuildProjectDirectory)/../frontend/</SpaRoot>
   </PropertyGroup>
 
   <ItemGroup>
@@ -25,5 +26,19 @@
     <PackageReference Include="Swashbuckle.AspNetCore.SwaggerGen" Version="9.0.0" />
     <PackageReference Include="Swashbuckle.AspNetCore.SwaggerUI" Version="9.0.0" />
   </ItemGroup>
+
+  <!-- Build React only when publishing, and serve it from the same .NET website. -->
+  <Target Name="PublishReact" AfterTargets="ComputeFilesToPublish">
+    <Exec WorkingDirectory="$(SpaRoot)" Command="npm ci --no-audit --no-fund" />
+    <Exec WorkingDirectory="$(SpaRoot)" Command="npm run build" />
+    <ItemGroup>
+      <ReactFiles Include="$(SpaRoot)dist/**/*" />
+      <ResolvedFileToPublish Include="@(ReactFiles->'%(FullPath)')" Exclude="@(ResolvedFileToPublish)">
+        <RelativePath>wwwroot/%(RecursiveDir)%(Filename)%(Extension)</RelativePath>
+        <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+        <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
+      </ResolvedFileToPublish>
+    </ItemGroup>
+  </Target>
 
 </Project>

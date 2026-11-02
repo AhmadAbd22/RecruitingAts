@@ -179,8 +179,14 @@ public static class DbSeeder
 
     private static async Task SeedPipelineStagesAsync(AppDbContext db)
     {
+        var firstSetup = !await db.PipelineStages.AnyAsync();
         foreach (var (name, sortOrder, isReserved, isTerminal) in PipelineStages)
         {
+            // Working stages belong to admins after the initial setup.
+            if (!isReserved && !firstSetup)
+            {
+                continue;
+            }
             var stage = await db.PipelineStages.FirstOrDefaultAsync(s => s.Name == name);
             if (stage is null)
             {

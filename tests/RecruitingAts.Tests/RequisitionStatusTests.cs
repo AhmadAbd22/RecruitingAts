@@ -93,7 +93,7 @@ public class RequisitionStatusTests
     public async Task Creator_BecomesOwner()
     {
         var db = TestFixture.CreateDb();
-        var hm = TestFixture.AddEmployee(db, "Hiring Manager", "hm@example.com");
+        var hm = TestFixture.AddEmployee(db, "Hiring Manager", "manager@demo.local");
         const string creatorUserId = "creator-1";
         var creator = TestFixture.AddEmployee(
             db, "Creator", "creator@example.com", creatorUserId);
@@ -120,6 +120,7 @@ public class RequisitionStatusTests
         Assert.Null(error);
         Assert.NotNull(detail);
         Assert.Equal(RequisitionStatuses.Draft, detail.Status);
+        Assert.Equal(hm.EmployeeId, detail.HiringManagerEmployeeId);
         Assert.Contains(detail.Team, t =>
             t.EmployeeId == creator.EmployeeId && t.TeamRole == TeamRoles.Owner);
 

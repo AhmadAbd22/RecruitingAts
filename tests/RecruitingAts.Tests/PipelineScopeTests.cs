@@ -129,11 +129,16 @@ public class PipelineScopeTests
             new Claim(ClaimTypes.NameIdentifier, teamUserId)
         ], "Test"));
 
-        var service = new ApplicationService(db, new RequisitionScopeService(db));
+        var service = new ApplicationService(db, new RequisitionScopeService(db), new AuditService(db));
         var board = await service.GetPipelineAsync(teamUser);
 
         Assert.Single(board);
         Assert.Equal(inScopeAppId, board[0].ApplicationId);
         Assert.Equal(inScopeReqId, board[0].RequisitionId);
+        Assert.Equal(candidateA, board[0].CandidateId);
+        Assert.Equal("In Scope Candidate", board[0].CandidateName);
+        Assert.Equal("In Scope Role", board[0].RequisitionTitle);
+        Assert.Equal(applied.PipelineStageId, board[0].PipelineStageId);
+        Assert.Equal(PipelineStageNames.Applied, board[0].StageName);
     }
 }

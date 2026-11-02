@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Authorization;
+using System.ComponentModel.DataAnnotations;
 using Microsoft.AspNetCore.Mvc;
 using RecruitingAts.Api.Services;
 
@@ -7,6 +8,7 @@ namespace RecruitingAts.Api.Controllers
     [Authorize]
     [Route("api/[controller]")]
     [ApiController]
+    [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
     public class RequisitionsController : ControllerBase
     {
         private readonly IRequisitionService _requisitionService;
@@ -72,6 +74,7 @@ namespace RecruitingAts.Api.Controllers
 
         public class StatusReasonRequest
         {
+            [StringLength(1000, ErrorMessage = "Reason must be 1000 characters or fewer.")]
             public string Reason { get; set; } = string.Empty;
         }
 

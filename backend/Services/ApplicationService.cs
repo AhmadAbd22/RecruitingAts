@@ -1,5 +1,6 @@
 ﻿
 using Microsoft.Data.SqlClient;
+using System.ComponentModel.DataAnnotations;
 using Microsoft.EntityFrameworkCore;
 using RecruitingAts.Api.Data;
 using RecruitingAts.Api.Data.Entities;
@@ -8,7 +9,7 @@ using System.Security.Claims;
 
 namespace RecruitingAts.Api.Services
 {
-    public class ApplicationService(AppDbContext db, IRequisitionScopeService requisitionScope)
+    public class ApplicationService(AppDbContext db, IRequisitionScopeService requisitionScope, IAuditService audit)
     {
         public async Task<ApplicationCreateResult> CreateAsync(
             CreateApplicationRequest request,
@@ -153,7 +154,14 @@ namespace RecruitingAts.Api.Services
 
             application.UpdatedAt = DateTime.UtcNow;
 
-            await db.SaveChangesAsync(cancellationToken);
+            // AuditService saves the changed application and audit entry together.
+            await audit.LogAsync(
+                user.FindFirstValue(ClaimTypes.NameIdentifier) ?? string.Empty,
+                "ApplicationStageChanged",
+                nameof(Application),
+                application.ApplicationId.ToString(),
+                $"Stage: {currentStage.Name} -> {stage.Name}",
+                cancellationToken);
 
             return new(ApplicationStageUpdateStatus.Success);
         }
@@ -267,12 +275,14 @@ namespace RecruitingAts.Api.Services
         int SortOrder);
     public record UpdateApplicationStageRequest(
         Guid PipelineStageId,
+        [StringLength(1000, ErrorMessage = "Reason must be 1000 characters or fewer.")]
         string? DispositionReason
     );
 
     public record CreateApplicationRequest(
         Guid CandidateId,
         Guid RequisitionId,
+        [StringLength(100, ErrorMessage = "Application source must be 100 characters or fewer.")]
         string? Source
     );
 }

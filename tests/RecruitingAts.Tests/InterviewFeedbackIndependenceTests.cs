@@ -1,176 +1,117 @@
-using Microsoft.EntityFrameworkCore;
+using RecruitingAts.Api.Auth;
 using RecruitingAts.Api.Data;
 using RecruitingAts.Api.Data.Entities;
 using RecruitingAts.Api.Domain;
+using RecruitingAts.Api.Services;
 
 namespace RecruitingAts.Tests;
 
-/// <summary>
-/// FR-INT-006 / FR-INT-007 — one submission per interviewer; feedback independence.
-/// Interview service is not implemented yet; these tests lock the data rules that service must honor.
-/// </summary>
 public class InterviewFeedbackIndependenceTests
 {
-    [Fact]
-    public async Task BeforeOwnSubmit_CannotSeePeersFeedback()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task PanelMember_CannotReadBeforeOwnSubmission_EvenWithAdminAccess(bool admin)
     {
-        var (db, interviewId, selfId, peerId) = await SeedInterviewAsync();
-        db.InterviewFeedbacks.Add(Feedback(interviewId, peerId, rating: 4));
-        await db.SaveChangesAsync();
-
-        var visible = await VisibleFeedbackAsync(db, interviewId, selfId);
-
-        Assert.Empty(visible);
+        var (db, interview, self, peer) = await SeedAsync();
+        await using var dispose = db;
+        var service = new InterviewService(db, new RequisitionScopeService(db));
+        await service.SubmitFeedbackAsync(interview.InterviewId, Feedback(), TestFixture.User("peer"));
+        var user = admin ? TestFixture.User("self", Permissions.RequisitionsViewAll) : TestFixture.User("self");
+        var hidden = await service.GetFeedbackAsync(interview.InterviewId, user);
+        Assert.Equal(InterviewFeedbackStatus.Forbidden, hidden.Status);
+        Assert.Null(hidden.Items);
+        Assert.Equal(InterviewFeedbackStatus.Success, (await service.SubmitFeedbackAsync(interview.InterviewId, Feedback(), user)).Status);
+        var visible = await service.GetFeedbackAsync(interview.InterviewId, user);
+        Assert.Equal(InterviewFeedbackStatus.Success, visible.Status);
+        Assert.Equal(2, visible.Items!.Count);
+        Assert.Contains(visible.Items, f => f.InterviewerEmployeeId == peer.EmployeeId);
+        Assert.Contains(visible.Items, f => f.InterviewerEmployeeId == self.EmployeeId);
     }
 
     [Fact]
-    public async Task AfterOwnSubmit_CanSeePeersFeedback()
+    public async Task OwnSubmission_UnlocksFeedbackWithoutWaitingForPeers_AndCannotBeRepeated()
     {
-        var (db, interviewId, selfId, peerId) = await SeedInterviewAsync();
-        db.InterviewFeedbacks.Add(Feedback(interviewId, peerId, rating: 4));
-        db.InterviewFeedbacks.Add(Feedback(interviewId, selfId, rating: 5));
-        await db.SaveChangesAsync();
+        var (db, interview, _, _) = await SeedAsync();
+        await using var dispose = db;
+        var service = new InterviewService(db, new RequisitionScopeService(db));
+        var user = TestFixture.User("self");
+        Assert.Equal(InterviewFeedbackStatus.Success, (await service.SubmitFeedbackAsync(interview.InterviewId, Feedback(), user)).Status);
+        Assert.Single((await service.GetFeedbackAsync(interview.InterviewId, user)).Items!);
+        Assert.Equal(InterviewFeedbackStatus.AlreadySubmitted, (await service.SubmitFeedbackAsync(interview.InterviewId, Feedback(), user)).Status);
+        Assert.Single(db.InterviewFeedbacks);
+    }
 
-        var visible = await VisibleFeedbackAsync(db, interviewId, selfId);
-
-        Assert.Equal(2, visible.Count);
-        Assert.Contains(visible, f => f.InterviewerEmployeeId == peerId);
-        Assert.Contains(visible, f => f.InterviewerEmployeeId == selfId);
+    [Theory]
+    [InlineData(0, "Good", "Improve")]
+    [InlineData(6, "Good", "Improve")]
+    [InlineData(3, " ", "Improve")]
+    [InlineData(3, "Good", " ")]
+    public async Task InvalidFeedback_IsNotSaved(int rating, string strengths, string concerns)
+    {
+        var (db, interview, _, _) = await SeedAsync();
+        await using var dispose = db;
+        var service = new InterviewService(db, new RequisitionScopeService(db));
+        var result = await service.SubmitFeedbackAsync(interview.InterviewId,
+            new(rating, strengths, concerns, "Hire"), TestFixture.User("self"));
+        Assert.Equal(InterviewFeedbackStatus.Invalid, result.Status);
+        Assert.Empty(db.InterviewFeedbacks);
     }
 
     [Fact]
-    public async Task SecondSubmission_BySameInterviewer_Fails()
+    public async Task UnassignedOrOutOfScopeUser_CannotSubmit_AndPersonalListOnlyShowsAssignments()
     {
-        var (db, interviewId, selfId, _) = await SeedInterviewAsync();
-        db.InterviewFeedbacks.Add(Feedback(interviewId, selfId, rating: 3));
+        var (db, interview, _, _) = await SeedAsync();
+        await using var dispose = db;
+        TestFixture.AddEmployee(db, "Admin", "admin@example.test", "admin");
         await db.SaveChangesAsync();
-
-        var (ok, error) = await TrySubmitAsync(db, interviewId, selfId, rating: 5);
-
-        Assert.False(ok);
-        Assert.Equal("Feedback already submitted for this interview.", error);
-        Assert.Equal(1, await db.InterviewFeedbacks.CountAsync(f =>
-            f.InterviewId == interviewId && f.InterviewerEmployeeId == selfId));
+        var service = new InterviewService(db, new RequisitionScopeService(db));
+        var admin = TestFixture.User("admin", Permissions.RequisitionsViewAll, Permissions.InterviewsSchedule);
+        Assert.Equal(InterviewFeedbackStatus.Forbidden, (await service.SubmitFeedbackAsync(interview.InterviewId, Feedback(), admin)).Status);
+        Assert.Equal(InterviewFeedbackStatus.NotFound, (await service.GetFeedbackAsync(interview.InterviewId, TestFixture.User("outsider"))).Status);
+        Assert.Empty(await service.GetMyInterviewsAsync(admin));
+        Assert.Empty(await service.GetMyInterviewsAsync(TestFixture.User("unlinked", Permissions.RequisitionsViewAll)));
+        Assert.Single(await service.GetMyInterviewsAsync(TestFixture.User("self")));
     }
 
-    /// <summary>
-    /// Encodes FR-INT-006: peers' feedback is hidden until the current interviewer has submitted.
-    /// </summary>
-    private static async Task<List<InterviewFeedback>> VisibleFeedbackAsync(
-        AppDbContext db,
-        Guid interviewId,
-        Guid interviewerEmployeeId)
+    [Fact]
+    public async Task Scheduling_RejectsWrongPanelAndLead_AndCreatesValidPanel()
     {
-        var ownSubmitted = await db.InterviewFeedbacks.AnyAsync(f =>
-            f.InterviewId == interviewId && f.InterviewerEmployeeId == interviewerEmployeeId);
-
-        if (!ownSubmitted)
-        {
-            return [];
-        }
-
-        return await db.InterviewFeedbacks
-            .AsNoTracking()
-            .Where(f => f.InterviewId == interviewId)
-            .ToListAsync();
+        var (db, interview, self, peer) = await SeedAsync();
+        await using var dispose = db;
+        var service = new InterviewService(db, new RequisitionScopeService(db));
+        var user = TestFixture.User("scheduler", Permissions.RequisitionsViewAll);
+        var request = new CreateInterviewRequest(interview.ApplicationId, "Technical", "Video", DateTimeOffset.UtcNow.AddDays(1), [self.EmployeeId], peer.EmployeeId);
+        Assert.Equal(InterviewCreateStatus.Invalid, (await service.CreateAsync(request, user)).Status);
+        Assert.Equal(InterviewCreateStatus.Invalid, (await service.CreateAsync(request with { PanelEmployeeIds = [Guid.NewGuid()], LeadEmployeeId = null }, user)).Status);
+        Assert.Equal(InterviewCreateStatus.Invalid, (await service.CreateAsync(request with { PanelEmployeeIds = [self.EmployeeId, self.EmployeeId], LeadEmployeeId = null }, user)).Status);
+        Assert.Equal(InterviewCreateStatus.Forbidden, (await service.CreateAsync(request, TestFixture.User("outsider"))).Status);
+        var valid = await service.CreateAsync(request with { LeadEmployeeId = self.EmployeeId }, user);
+        Assert.Equal(InterviewCreateStatus.Success, valid.Status);
+        Assert.True(Assert.Single(valid.Interview!.Panel).IsLead);
     }
 
-    /// <summary>
-    /// Encodes FR-INT-007: one feedback row per interviewer per interview.
-    /// </summary>
-    private static async Task<(bool Ok, string? Error)> TrySubmitAsync(
-        AppDbContext db,
-        Guid interviewId,
-        Guid interviewerEmployeeId,
-        int rating)
-    {
-        var exists = await db.InterviewFeedbacks.AnyAsync(f =>
-            f.InterviewId == interviewId && f.InterviewerEmployeeId == interviewerEmployeeId);
-        if (exists)
-        {
-            return (false, "Feedback already submitted for this interview.");
-        }
+    private static SubmitInterviewFeedbackRequest Feedback() => new(4, "Explains decisions clearly", "Needs more cloud experience", "Proceed");
 
-        db.InterviewFeedbacks.Add(Feedback(interviewId, interviewerEmployeeId, rating));
-        await db.SaveChangesAsync();
-        return (true, null);
-    }
-
-    private static async Task<(
-        AppDbContext Db,
-        Guid InterviewId,
-        Guid SelfId,
-        Guid PeerId)> SeedInterviewAsync()
+    private static async Task<(AppDbContext Db, Interview Interview, Employee Self, Employee Peer)> SeedAsync()
     {
         var db = TestFixture.CreateDb();
-        var hm = TestFixture.AddEmployee(db, "Hiring Manager", "hm@example.com");
-        var self = TestFixture.AddEmployee(db, "Self Interviewer", "self@example.com", "self-user");
-        var peer = TestFixture.AddEmployee(db, "Peer Interviewer", "peer@example.com", "peer-user");
-        var req = TestFixture.AddRequisition(db, hm.EmployeeId, status: RequisitionStatuses.Published);
-
-        var stage = new PipelineStage
-        {
-            PipelineStageId = Guid.NewGuid(),
-            Name = PipelineStageNames.Interview,
-            SortOrder = 3
-        };
+        var self = TestFixture.AddEmployee(db, "Self Interviewer", "self@example.test", "self");
+        var peer = TestFixture.AddEmployee(db, "Peer Interviewer", "peer@example.test", "peer");
+        var req = TestFixture.AddRequisition(db, self.EmployeeId, status: RequisitionStatuses.Published);
+        TestFixture.AddTeamMember(db, req.RequisitionId, self.EmployeeId, TeamRoles.TechnicalInterviewer);
+        TestFixture.AddTeamMember(db, req.RequisitionId, peer.EmployeeId, TeamRoles.FinalInterviewer);
+        var stage = new PipelineStage { Name = "Interview", SortOrder = 4 };
+        var candidate = new Candidate { FullName = "Candidate", Email = "candidate@example.test", Phone = "+12025550101" };
         db.PipelineStages.Add(stage);
-
-        var candidate = new Candidate
-        {
-            CandidateId = Guid.NewGuid(),
-            FullName = "Candidate",
-            Email = "candidate@example.com",
-            Phone = "03001234567"
-        };
         db.Candidates.Add(candidate);
-
-        var application = new Application
-        {
-            ApplicationId = Guid.NewGuid(),
-            CandidateId = candidate.CandidateId,
-            RequisitionId = req.RequisitionId,
-            PipelineStageId = stage.PipelineStageId
-        };
+        var application = new Application { RequisitionId = req.RequisitionId, CandidateId = candidate.CandidateId, PipelineStageId = stage.PipelineStageId };
         db.Applications.Add(application);
-
-        var interview = new Interview
-        {
-            InterviewId = Guid.NewGuid(),
-            ApplicationId = application.ApplicationId,
-            InterviewType = "Technical",
-            Mode = "Video",
-            ScheduledAt = DateTime.UtcNow.AddDays(1),
-            Status = "Scheduled"
-        };
+        var interview = new Interview { ApplicationId = application.ApplicationId, InterviewType = "Technical", Mode = "Video", ScheduledAt = DateTime.UtcNow.AddDays(1), Status = "Scheduled" };
+        interview.PanelMembers.Add(new InterviewPanelMember { EmployeeId = self.EmployeeId });
+        interview.PanelMembers.Add(new InterviewPanelMember { EmployeeId = peer.EmployeeId });
         db.Interviews.Add(interview);
-        db.InterviewPanelMembers.AddRange(
-            new InterviewPanelMember
-            {
-                InterviewPanelMemberId = Guid.NewGuid(),
-                InterviewId = interview.InterviewId,
-                EmployeeId = self.EmployeeId
-            },
-            new InterviewPanelMember
-            {
-                InterviewPanelMemberId = Guid.NewGuid(),
-                InterviewId = interview.InterviewId,
-                EmployeeId = peer.EmployeeId
-            });
-
         await db.SaveChangesAsync();
-        return (db, interview.InterviewId, self.EmployeeId, peer.EmployeeId);
+        return (db, interview, self, peer);
     }
-
-    private static InterviewFeedback Feedback(Guid interviewId, Guid interviewerId, int rating) =>
-        new()
-        {
-            InterviewFeedbackId = Guid.NewGuid(),
-            InterviewId = interviewId,
-            InterviewerEmployeeId = interviewerId,
-            Rating = rating,
-            Strengths = "Strengths",
-            Concerns = "Concerns",
-            Recommendation = "Hire"
-        };
 }

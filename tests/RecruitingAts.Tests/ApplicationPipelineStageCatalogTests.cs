@@ -37,7 +37,7 @@ public class ApplicationPipelineStageCatalogTests
             });
         await db.SaveChangesAsync();
 
-        var service = new ApplicationService(db, new RequisitionScopeService(db));
+        var service = new ApplicationService(db, new RequisitionScopeService(db), new AuditService(db));
 
         var stages = await service.GetPipelineStagesAsync();
 

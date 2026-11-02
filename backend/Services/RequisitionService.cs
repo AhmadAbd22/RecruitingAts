@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using System.ComponentModel.DataAnnotations;
 using Microsoft.EntityFrameworkCore;
 using RecruitingAts.Api.Auth;
 using RecruitingAts.Api.Data;
@@ -17,7 +18,7 @@ public class RequisitionService(
         CancellationToken cancellationToken = default)
     {
         var employeeId = await scope.GetEmployeeIdAsync(user, cancellationToken);
-        var canSeeBudget = user.HasClaim(Permissions.ClaimType, Permissions.CompensationView);
+        var canSeeBudget = CanSeeBudget(user);
 
         var items = await scope.Scope(db.Requisitions.AsNoTracking(), user, employeeId)
             .OrderByDescending(r => r.UpdatedAt)
@@ -30,6 +31,14 @@ public class RequisitionService(
                 canSeeBudget ? r.BudgetMin : null,
                 canSeeBudget ? r.BudgetMax : null))
             .ToListAsync(cancellationToken);
+
+        foreach (var item in items.Where(r => r.BudgetMin.HasValue || r.BudgetMax.HasValue))
+        {
+            await audit.LogAsync(
+                user.FindFirstValue(ClaimTypes.NameIdentifier) ?? string.Empty,
+                "CompensationViewed", nameof(Requisition), item.RequisitionId.ToString(),
+                "Viewed budget in requisitions list", cancellationToken);
+        }
 
         return items;
     }
@@ -54,7 +63,7 @@ public class RequisitionService(
             return null;
         }
 
-        var canSeeBudget = user.HasClaim(Permissions.ClaimType, Permissions.CompensationView);
+        var canSeeBudget = CanSeeBudget(user);
         if (canSeeBudget && (req.BudgetMin.HasValue || req.BudgetMax.HasValue))
         {
             var userId = user.FindFirstValue(ClaimTypes.NameIdentifier) ?? string.Empty;
@@ -91,7 +100,20 @@ public class RequisitionService(
         {
             return (null, "All requisition fields are required.");
         }
-        
+
+        // Also protect calls made directly to this service.
+        if (request.Title.Length > 200)
+            return (null, "Title must be 200 characters or fewer.");
+        if (request.Department.Length > 200)
+            return (null, "Department must be 200 characters or fewer.");
+        if (request.EmploymentType.Length > 100)
+            return (null, "Employment type must be 100 characters or fewer.");
+        if (request.Seniority.Length > 100)
+            return (null, "Seniority must be 100 characters or fewer.");
+        if (request.Skills.Length > 1000)
+            return (null, "Skills must be 1000 characters or fewer.");
+        if (request.Openings < 1)
+            return (null, "Open positions must be at least 1.");
 
         var employeeId = await scope.GetEmployeeIdAsync(user, cancellationToken);
         if (employeeId is null)
@@ -99,11 +121,11 @@ public class RequisitionService(
             return (null, "Current user has no Employee record.");
         }
 
-        var demoHiringManager = await db.Employees
-            .FirstOrDefaultAsync(e => e.Email == "manager@demo.local" && e.IsActive, cancellationToken);
-        if (demoHiringManager is null)
+        var hiringManager = await db.Employees
+            .FirstOrDefaultAsync(e => e.EmployeeId == request.HiringManagerEmployeeId && e.IsActive, cancellationToken);
+        if (hiringManager is null)
         {
-            return (null, "Demo hiring manager not found or inactive.");
+            return (null, "Select an active employee as the hiring manager.");
         }
 
         var now = DateTime.UtcNow;
@@ -116,9 +138,9 @@ public class RequisitionService(
             Seniority = request.Seniority.Trim(),
             Skills = request.Skills.Trim(),
             JobDescription = request.JobDescription.Trim(),
-            Openings = request.Openings < 1 ? 1 : request.Openings,
+            Openings = request.Openings,
             Status = RequisitionStatuses.Draft,
-            HiringManagerEmployeeId = demoHiringManager.EmployeeId,
+            HiringManagerEmployeeId = hiringManager.EmployeeId,
             BudgetMin = null,
             BudgetMax = null,
             CreatedAt = now,
@@ -251,6 +273,11 @@ public class RequisitionService(
             return (null, "Rejection reason is required.");
         }
 
+        if (reason.Length > 1000)
+        {
+            return (null, "Reason must be 1000 characters or fewer.");
+        }
+
         var req = await db.Requisitions.FirstOrDefaultAsync(r => r.RequisitionId == id, cancellationToken);
         if (req is null)
         {
@@ -301,6 +328,11 @@ public class RequisitionService(
             return (null, $"Reason is required for status {newStatus}.");
         }
 
+        if (reason is not null && reason.Length > 1000)
+        {
+            return (null, "Reason must be 1000 characters or fewer.");
+        }
+
         var (req, error) = await LoadForManageAsync(id, user, cancellationToken);
         if (error is not null || req is null)
         {
@@ -342,6 +374,23 @@ public class RequisitionService(
         if (req is null)
         {
             return (null, "Requisition not found.");
+        }
+
+        if (budgetMin < 0 || budgetMax < 0)
+        {
+            return (null, "Budget values cannot be negative.");
+        }
+
+        if (budgetMin.HasValue && budgetMax.HasValue && budgetMin.Value > budgetMax.Value)
+        {
+            return (null, "Minimum budget must be less than or equal to maximum budget.");
+        }
+
+        // These columns use SQL decimal(18, 2).
+        const decimal largestBudget = 9999999999999999.99m;
+        if (budgetMin > largestBudget || budgetMax > largestBudget)
+        {
+            return (null, "Budget values are too large to save.");
         }
 
         req.BudgetMin = budgetMin;
@@ -493,6 +542,10 @@ public class RequisitionService(
             cancellationToken);
     }
 
+    private static bool CanSeeBudget(ClaimsPrincipal user) =>
+        user.HasClaim(Permissions.ClaimType, Permissions.CompensationView)
+        || user.HasClaim(Permissions.ClaimType, Permissions.CompensationEdit);
+
     private static RequisitionDetail ToDetail(Requisition req, bool includeBudget) =>
         new(
             req.RequisitionId,
@@ -506,7 +559,7 @@ public class RequisitionService(
             req.Status,
             req.StatusReason,
             req.HiringManagerEmployeeId,
-            req.HiringManager.FullName,
+            req.HiringManager?.FullName ?? "Not available",
             includeBudget ? req.BudgetMin : null,
             includeBudget ? req.BudgetMax : null,
             req.TeamMembers
@@ -520,13 +573,21 @@ public class RequisitionService(
 }
 
 public record CreateRequisitionRequest(
+    [Required, StringLength(200, ErrorMessage = "Title must be 200 characters or fewer.")]
     string Title,
+    [Required, StringLength(200, ErrorMessage = "Department must be 200 characters or fewer.")]
     string Department,
+    [Required, StringLength(100, ErrorMessage = "Employment type must be 100 characters or fewer.")]
     string EmploymentType,
+    [Required, StringLength(100, ErrorMessage = "Seniority must be 100 characters or fewer.")]
     string Seniority,
+    [Required, StringLength(1000, ErrorMessage = "Skills must be 1000 characters or fewer.")]
     string Skills,
+    [Required]
     string JobDescription,
-    int Openings);
+    [Range(1, int.MaxValue, ErrorMessage = "Open positions must be at least 1.")]
+    int Openings,
+    Guid HiringManagerEmployeeId);
 
 public record RequisitionListItem(
     Guid RequisitionId,
