@@ -1,6 +1,5 @@
-import { useEffect, useState, type FormEvent } from 'react'
+import { useState, type FormEvent } from 'react'
 import { Navigate, useLocation, useNavigate } from 'react-router-dom'
-import { getHealth } from '../api/client'
 import { useAuth } from '../auth/AuthContext'
 import { Button } from '../components/shared'
 
@@ -24,13 +23,6 @@ export function LoginPage() {
   const [fullName, setFullName] = useState('Demo Recruiter')
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
-  const [health, setHealth] = useState('checking…')
-
-  useEffect(() => {
-    getHealth()
-      .then((h) => setHealth(`${h.status} — ${h.service}`))
-      .catch(() => setHealth('unreachable (is the API running?)'))
-  }, [])
 
   if (!loading && user) {
     return <Navigate to={from} replace />
@@ -58,7 +50,6 @@ export function LoginPage() {
           Recruiting ATS
           <small>Sign in</small>
         </h1>
-        <p className="muted">API health: {health}</p>
 
         <div className="tabs">
           <button

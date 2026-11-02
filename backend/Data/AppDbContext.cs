@@ -33,7 +33,12 @@ public class AppDbContext : IdentityDbContext<ApplicationUser>
             e.Property(x => x.Email).HasMaxLength(256).IsRequired();
             e.Property(x => x.Department).HasMaxLength(200).IsRequired();
             e.HasIndex(x => x.Email);
-            e.HasIndex(x => x.UserId).IsUnique().HasFilter("[UserId] IS NOT NULL");
+            var userIdIndex = e.HasIndex(x => x.UserId).IsUnique();
+            // Filtered unique indexes are SQL Server–specific; SQLite demo path omits the filter.
+            if (!Database.IsSqlite())
+            {
+                userIdIndex.HasFilter("[UserId] IS NOT NULL");
+            }
 
             e.HasOne(x => x.User)
                 .WithOne()

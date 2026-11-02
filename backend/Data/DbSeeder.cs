@@ -72,7 +72,15 @@ public static class DbSeeder
         var sp = scope.ServiceProvider;
 
         var db = sp.GetRequiredService<AppDbContext>();
-        await db.Database.MigrateAsync();
+        if (db.Database.IsSqlite())
+        {
+            // Cloud demo path: SQL Server migrations are not portable to SQLite.
+            await db.Database.EnsureCreatedAsync();
+        }
+        else
+        {
+            await db.Database.MigrateAsync();
+        }
 
         var roleManager = sp.GetRequiredService<RoleManager<IdentityRole>>();
         var userManager = sp.GetRequiredService<UserManager<ApplicationUser>>();
